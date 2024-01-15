@@ -1,2 +1,2 @@
-# reverie
-Reflectance Extraction and Validation for Environemental Remote Imaging Exploration
+# REVERIE
+Reflectances Extraction and Validation for Environmental Remote Imaging Exploration
