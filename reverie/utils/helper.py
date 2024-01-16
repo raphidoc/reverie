@@ -111,6 +111,7 @@ def parse_mapinfo(mapinfo):
 
     # TODO: when CRS.from_proj4 is exported to_wtk it lack PROJCRS and BASEGEOGCRS
     #   When created from_epsg, to_wtk is complete
+    #   see: https://proj4.org/faq.html#what-is-the-best-format-for-describing-coordinate-reference-systems
     crs = pyproj.crs.CRS.from_proj4(proj4string)
     crs = pyproj.crs.CRS.from_epsg(crs.to_epsg())
 
