@@ -1,5 +1,6 @@
 # Standard library imports
 import os
+import time
 
 # Third party imports
 from osgeo import gdal
@@ -40,12 +41,13 @@ class PixWISE(Image):
 
     def __init__(self, image_dir, image_name):
 
+        t0 = time.perf_counter()
+
+        # TODO: Need to learn more about super(), inheritance and composition.
         super().__init__()
-        self.ImageDir = image_dir
-        self.ImageName = image_name
 
         if os.path.isdir(image_dir):
-            self.ImageDir = image_dir
+            self.image_dir = image_dir
         else:
             raise ValueError("image_dir does not exist")
 
@@ -53,8 +55,10 @@ class PixWISE(Image):
         self.hdr_f = os.path.join(image_dir, image_name + '-L1G.pix.hdr')
         self.pix_f = os.path.join(image_dir, image_name + '-L1G.pix')
 
-        if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.hdr_f):
+        if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
             print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
+
+        self.image_name = image_name
 
         # Parse ENVI header
         self.header = helper.read_envi_hdr(hdr_f=self.hdr_f)
@@ -65,9 +69,9 @@ class PixWISE(Image):
 
         # Define image cube size
         # self.src_ds.RasterYSize
-        # Vertical axis: lines = rows = y
+        # Vertical axis: lines = rows = height = y
         # self.src_ds.RasterXSize
-        # Horizontal axis: samples = columns = x
+        # Horizontal axis: samples = columns = width = x
         self.n_rows = int(self.header['lines'])
         self.n_cols = int(self.header['samples'])
         self.n_bands = int(self.header['bands'])
@@ -103,17 +107,17 @@ class PixWISE(Image):
 
         # Define image coordinate system from 'map info'
         map_info = self.header['map info']
-        self.Affine, self.Proj, self.Proj4String = helper.parse_mapinfo(map_info)\
+        self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)\
 
         # When in debugging mode with pdb, have to pass class and self to super(PixWISE, self)
         # see https://stackoverflow.com/questions/53508770/python-3-runtimeerror-super-no-arguments
         # TODO: Not even needed to call super().cal_coordinate ?
-        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.Proj)
+        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
 
         # Define time for the image
         self.acq_time_z = pendulum.parse(self.header['acquisition time'], )
 
-        self.cal_time(self.central_lon, self.central_lat)
+        self.cal_time(self.center_lon, self.center_lat)
 
         # Geocorrection Look Up tables
         self.glu_hdr_f = os.path.join(image_dir, image_name + '-L1A.glu.hdr')
@@ -130,19 +134,21 @@ class PixWISE(Image):
 
         else:
             self.flightline = FlightLine.FromWISEFile(nav_sum_log=self.nav_f, glu_hdr=self.glu_hdr_f)
+            self.z = self.flightline.height
 
 
         # Other instance attribute that need to be instanced before population by methods
         self._valid_mask = None
 
-
-        self.NetDS = None
-
-        self.cal_viewing_geo()
-
         self.cal_sun_geom()
 
-    def cal_viewing_geo(self):
+        self.cal_view_geom()
+
+        t1 = time.perf_counter()
+
+        print(f"Image instantiated from class {self.__class__.__name__} in {t1-t0:.2f}s")
+
+    def cal_view_geom(self):
         '''
         extract viewing zenith angle
         the orginal data from the flight line is not georeferenced, and the nrows and ncols are not the same as the georeferenced ones
@@ -212,116 +218,7 @@ class PixWISE(Image):
         self.view_azimuth[~self.get_valid_mask()] = np.nan
         self.SampleIndex[~self.get_valid_mask()] = np.nan
 
-    def to_netcdf(self, outfile=None, var=None, unit=None, savegeometry = True, compression="zlib", complevel=1):
-
-        if outfile is None:
-            outfile = os.path.join(self.ImageDir, self.ImageName) + '-L1C.nc'
-
-        if not var is None:
-            var = var
-        else:
-            var = self.VarName
-
-        if not unit is None:
-            unit = unit
-        else:
-            unit = self.unit
-
-        # if Var == None:
-        #     print('Writing varibles: '+ )
-
-        width, height, bands = self.n_cols, self.n_rows, self.n_bands
-        wavelengths = self.wavelength
-        transform = self.Affine
-
-        # try:
-        #     NetDS = netCDF4.Dataset(OutFile, "w", format="NETCDF4")
-        # except Exception as e:
-        #     print("Cannot create: "+OutFile)
-        #     raise e
-        # else:
-
-        with netCDF4.Dataset(outfile, "w", format="NETCDF4") as NetDS:
-
-            # Global Attributes
-            # TODO validate that it follow the convention with cfdm
-            NetDS.Conventions = 'CF-1.10'
-            NetDS.title = self.ImageName
-            NetDS.acquisition_time = self.acq_time_z.strftime('%y-%m-%dT%H:%M:%SZ')
-            NetDS.history = 'File created on ' + pendulum.now("utc").strftime('%y-%m-%dT%H:%M:%SZ')
-            NetDS.institution = 'AquaTel UQAR'
-            #NetDS.source = 'ac4icw'
-            #NetDS.version = '0.1.0'
-            #NetDS.references = 'Ask Yanqun Pan'
-            NetDS.comment = 'Conversion from pix to NetCDF'
-
-            # Set coordinates and CRS attributes
-
-            x1, y1 = helper.transform_xy(transform,
-                                  rows=0,
-                                  cols=range(0, width, 1),
-                                  offset='center')
-
-            x2, y2 = helper.transform_xy(transform,
-                                  rows=range(0, height, 1),
-                                  cols=0,
-                                  offset='center')
-
-            NetDS.createDimension('y', height)
-            NetDS.createDimension('x', width)
-            y_var = NetDS.createVariable('y', 'f4', ('y',))
-            x_var = NetDS.createVariable('x', 'f4', ('x',))
-
-            y_var[:] = y2
-            x_var[:] = x1
-
-            y_var.units = 'm'
-            y_var.standard_name = 'projection_y_coordinate'
-            y_var.long_name = 'y-coordinate in projected coordinate system'
-            y_var.axis = 'y'
-
-            x_var.units = 'm'
-            x_var.standard_name = 'projection_x_coordinate'
-            x_var.long_name = 'x-coordinate in projected coordinate system'
-            x_var.axis = 'x'
-
-            # TODO proj4 result in loss of projection information, see: https://proj4.org/faq.html#what-is-the-best-format-for-describing-coordinate-reference-systems
-            crs = pyproj.CRS.from_proj4(self.Proj4String)
-            print('Detected EPSG:'+str(crs.to_epsg()))
-            crs = pyproj.CRS.from_epsg(crs.to_epsg())
-            cf_grid_mapping = crs.to_cf()
-
-            ProjVar = NetDS.createVariable(cf_grid_mapping['grid_mapping_name'], np.int32, ())
-
-            ProjVar.crs_wtk = cf_grid_mapping['crs_wkt']
-            ProjVar.semi_major_axis = cf_grid_mapping['semi_major_axis']
-            ProjVar.semi_minor_axis = cf_grid_mapping['semi_minor_axis']
-            ProjVar.inverse_flattening = cf_grid_mapping['inverse_flattening']
-            ProjVar.reference_ellipsoid_name = cf_grid_mapping['reference_ellipsoid_name']
-            ProjVar.longitude_of_prime_meridian = cf_grid_mapping['longitude_of_prime_meridian']
-            ProjVar.prime_meridian_name = cf_grid_mapping['prime_meridian_name']
-            ProjVar.geographic_crs_name = cf_grid_mapping['geographic_crs_name']
-            ProjVar.horizontal_datum_name = cf_grid_mapping['horizontal_datum_name']
-            ProjVar.projected_crs_name = cf_grid_mapping['projected_crs_name']
-            ProjVar.grid_mapping_name = cf_grid_mapping['grid_mapping_name']
-            ProjVar.latitude_of_projection_origin = cf_grid_mapping['latitude_of_projection_origin']
-            ProjVar.longitude_of_central_meridian = cf_grid_mapping['longitude_of_central_meridian']
-            ProjVar.false_easting = cf_grid_mapping['false_easting']
-            ProjVar.false_northing = cf_grid_mapping['false_northing']
-            ProjVar.scale_factor_at_central_meridian = cf_grid_mapping['scale_factor_at_central_meridian']
-
-            # Not sure that it's the right place to save that
-            #ProjVar.geotransform = Transform
-
-            ### wavelength coordinates
-
-            NetDS.createDimension('band', bands)
-            band_var = NetDS.createVariable('band', 'f4', ('band',))
-            band_var[:] = wavelengths #([round(w, 2) for w in wavelengths])
-
-            band_var.units = 'nm'
-            band_var.standard_name = 'sensor_band_central_radiation_wavelength'
-            band_var.axis = 'B'
+    def to_netcdf_old(self, outfile=None, var=None, unit=None, savegeometry = True, compression="zlib", complevel=1):
 
             ### Data Variable
 
