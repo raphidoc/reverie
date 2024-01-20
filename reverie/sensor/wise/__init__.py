@@ -1,1 +1,1 @@
-from . import image
+from . import read_pix
