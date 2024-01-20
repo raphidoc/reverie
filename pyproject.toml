@@ -1,0 +1,39 @@
+[project]
+name = "reverie"
+version = "0.1.0"
+description = "Reflectance Exctraction and Validation for Environemental Remote Imaging Exploraton"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "Raphael Mabit", email = "raphael.mabit@gmail.com"}]
+keywords = ["remote sensing", "image", "atmospheric", "aquatic", "compensation", "correction"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Development Status :: 2 - Pre-Alpha",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Oceanography",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Visualization"
+]
+dependencies = [
+    "numpy",
+    "pyproj",
+    "netCDF4"
+]
+
+[project.urls]
+Homepage = "https://github.com/raphidoc/reverie"
+
+[project.scripts]
+ac_run = "reverie.workflow.__main__:ac_run"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+"reverie.data" = ["*.nc"]

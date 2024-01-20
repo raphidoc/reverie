@@ -1,10 +1,8 @@
 # Standard library imports
+import array
 import os
-import time
 from abc import ABC, abstractmethod
 import datetime
-
-
 
 # Third party imports
 from osgeo import gdal
@@ -19,12 +17,13 @@ import pendulum
 # REVERIE import
 from reverie.utils import helper
 from reverie.utils.tile import Tile
+from reverie.utils.cf_aliases import get_cf_std_name
 
 
-class Image(ABC):
+class ReveCube(ABC):
     """
-    Image abstract class is used as the base template for image data structure in REVERIE.
-    This class is to be expanded by sensor specific class as in ../sensor/wise/image.py
+    ReveCube abstract class is used as the base template for spectral imagery data structure in REVERIE.
+    This class is to be expanded by sensor specific class as in ../sensor/wise/read_pix.py
 
         Attributes
     ----------
@@ -48,7 +47,7 @@ class Image(ABC):
     viewing_zenith: spatially resolved viewing zenith [?]
     view_azimuth: spatially resolved viewing azimuth [?]
     relative_azimuth:spatially resolved relative azimuth (solar_azimuth - view_azimuth) [?]
-    SampleIndex: position of pixel on the detector array spatial dimension (pushbroom sensor only)
+    sample_index: position of pixel on the detector array spatial dimension (pushbroom sensor only)
 
         Methods
     -------
@@ -56,8 +55,15 @@ class Image(ABC):
     """
 
     def __init__(self):
-        self.image_dir = None
-        self.image_name = None
+
+        # Datasets attribute
+        self.src_ds = None
+        self.net_ds = None
+        self.no_data = None
+        # TODO: scale factor should be handled variable specific
+        #  it might not be appropriate to apply the same to radiometric and geometric data for example
+        self.scale_factor = None
+        self.proj_var = None
 
         # Radiometric attributes
         self.wavelength = None
@@ -82,7 +88,14 @@ class Image(ABC):
         self.viewing_zenith = None
         self.view_azimuth = None
         self.relative_azimuth = None
-        self.SampleIndex = None
+        self.sample_index = None
+
+        # Component attribute
+        self.PixelExtractor = None
+
+    def __str__(self):
+        print("")
+
 
     def cal_coordinate(self, affine, n_rows, n_cols, crs):
         """
@@ -218,61 +231,35 @@ class Image(ABC):
         calculate relative azimuth angle
         :return:
         '''
-        self.raa = np.abs(self.view_azimuth - self.solar_azimuth)
+        self.relative_azimuth = np.abs(self.view_azimuth - self.solar_azimuth)
 
-
-    @abstractmethod
+    #@abstractmethod
     def cal_view_geom(self):
         pass
 
-    def create_netcdf(self, out_file: str = None, compression="zlib", complevel=1):
-        """
-        Create CF compliant NetCDF dataset from Image
+    def create_dataset_nc(self, out_file: str = None):
+        """Create CF-1.0 compliant NetCDF dataset from DateCube
+        CF-1.0 (http://cfconventions.org/Data/cf-conventions/cf-conventions-1.0/build/cf-conventions.html#dimensions)
+         is chosen to ensure compatibility with the GDAL NetCDF driver:
+         (https://gdal.org/drivers/raster/netcdf.html).
+
+        This format can also be read by SNAP but the spectrum view tool does not find any spectral dimension.
+        Quinten wrote something about that in ACOLITE.
+
         :return: None
         """
 
-        # TODO: get the standard_name of all the quantity that we could write from optical imagery ?
-        #  https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
-
-        #standard name
-
-        # Radiometric quantities:
-        # There is no good standard name for water leaving reflectance
-
-        # Rrs = surface_ratio_of_upwelling_radiance_emerging_from_sea_water_to_downwelling_radiative_flux_in_air [sr-1]
-        # F0 = solar_irradiance_per_unit_wavelength [W m-2 m-1]
-        # Radiance at sensor = upwelling_radiance_per_unit_wavelength_in_air [W m-2 m-1 sr-1]
-        # Wavelength = sensor_band_central_radiation_wavelength [m]
-
-        # Geometric quantities:
-        # solar_azimuth_angle [degree]
-        # solar_zenith_angle [degree]
-
-        # sensor_azimuth_angle [degree]
-        # sensor_zenith_angle [degree]
-
-        # Relative azimuth angle = angle_of_rotation_from_solar_azimuth_to_platform_azimuth [degree]
-        # platform_azimuth_angle / sensor_azimuth_angle / relative_platform_azimuth_angle / relative_sensor_azimuth_angle ?
-
-        # Domain axis
-        # altitude: Altitude is the (geometric) height above the geoid, which is the reference geopotential surface. The geoid is similar to mean sea level. [m]
-        # latitude: atitude is positive northward; its units of degree_north (or equivalent) indicate this explicitly. [degree_north]
-        # longitude: Longitude is positive eastward; its units of degree_east (or equivalent) indicate this explicitly [degree_east]
-        # time [s]
-
-        # projection_x_coordinate [m]
-        # projection_y_coordinate [m]
-
         if out_file is None:
-            out_file = os.path.join(self.image_dir, self.image_name) + '-L1C.nc'
+            raise Exception("out_file file not set, cannot create dataset")
 
         try:
             net_ds = netCDF4.Dataset(out_file, "w", format="NETCDF4")
         except Exception as e:
-            raise e
+            print(e)
+            return
 
-        # TODO validate that it follow the convention with cfdm / cf-python
-        net_ds.Conventions = 'CF-1.11'
+        # TODO validate that it follow the convention with cfdm / cf-python. For compatibility with GDAL NetCDF driver use CF-1.0
+        net_ds.Conventions = 'CF-1.0'
         net_ds.title = 'Remote sensing image written by REVERIE'
         net_ds.history = 'File created on ' + datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%SZ')
         net_ds.institution = 'AquaTel UQAR'
@@ -282,11 +269,11 @@ class Image(ABC):
         net_ds.comment = 'Reflectance Extraction and Validation for Environmental Remote Imaging Exploration'
 
         # Create Dimensions
+        net_ds.createDimension('W', len(self.wavelength))
         net_ds.createDimension('T', len([self.acq_time_z]))
         net_ds.createDimension('Z', len([self.z]))
         net_ds.createDimension('Y', len(self.y))
         net_ds.createDimension('X', len(self.x))
-        net_ds.createDimension('Wavelength', len(self.wavelength))
 
         # Create coordinate variables
         # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
@@ -300,8 +287,8 @@ class Image(ABC):
 
         z_var = net_ds.createVariable('Z', 'f4', ('Z',))
         z_var.units = 'm'
-        z_var.standard_name = 'projection_y_coordinate'
-        z_var.long_name = 'y-coordinate in projected coordinate system'
+        z_var.standard_name = 'altitude'
+        z_var.long_name = 'Altitude is the viewing height above the geoid, positive upward'
         z_var.axis = 'y'
         z_var[:] = self.z
 
@@ -331,9 +318,10 @@ class Image(ABC):
         #lon_var.long_name = 'longitude'
         lon_var[:] = self.lon
 
-        band_var = net_ds.createVariable('Wavelength', 'f4', ('Wavelength',))
+        band_var = net_ds.createVariable('W', 'f4', ('W',))
         band_var.units = 'nm'
-        band_var.standard_name = 'sensor_band_central_radiation_wavelength'
+        band_var.standard_name = 'radiation_wavelength' # 'sensor_band_central_radiation_wavelength'
+        band_var.long_name = 'Central wavelengths of the sensor bands'
         band_var.axis = 'Wavelength'
         band_var[:] = self.wavelength  # ([round(w, 2) for w in wavelengths])
 
@@ -342,8 +330,9 @@ class Image(ABC):
         print('Detected EPSG:' + str(crs.to_epsg()))
         cf_grid_mapping = crs.to_cf()
 
-        proj_var = net_ds.createVariable(cf_grid_mapping['grid_mapping_name'], np.int32, ())
+        proj_var = net_ds.createVariable('grid_mapping', np.int32, ())
 
+        proj_var.grid_mapping_name = cf_grid_mapping['grid_mapping_name']
         proj_var.crs_wtk = cf_grid_mapping['crs_wkt']
         proj_var.semi_major_axis = cf_grid_mapping['semi_major_axis']
         proj_var.semi_minor_axis = cf_grid_mapping['semi_minor_axis']
@@ -361,4 +350,137 @@ class Image(ABC):
         proj_var.false_northing = cf_grid_mapping['false_northing']
         proj_var.scale_factor_at_central_meridian = cf_grid_mapping['scale_factor_at_central_meridian']
 
-        net_ds.close()
+        self.proj_var = proj_var
+        self.net_ds = net_ds
+
+    def create_var_nc(self, var: str = None, dimensions: tuple = None, compression='zlib', complevel=1):
+        """ Create a CF-1.0 variable in a NetCDF dataset
+
+        Parameters
+        ----------
+        var : str
+            Name of the variable to write to the NetCDF dataset
+        dimensions : tuple
+            tuple containing the dimension of the var with the form ('W', 'Y', 'X',).
+        compression : str, default: 'zlib'
+            Name of the compression algorithm to use. Use None to deactivate compression.
+        complevel : int, default: 1
+            Compression level.
+
+        Returns
+        -------
+
+        See Also
+        --------
+        create_dataset_nc
+        """
+
+        ds = self.net_ds
+
+        data_var = ds.createVariable(
+            varname=var,
+            datatype='i4',
+            dimensions=dimensions,
+            fill_value=self.no_data,
+            compression=compression,
+            complevel=complevel)  # ,
+        # significant_digits=5)
+
+        data_var.grid_mapping = self.proj_var.name
+
+        # Follow the standard name table CF convention
+        # TODO: fill the units and standard name automatically from var ?
+        #  Water leaving reflectance could be: reflectance_of_water_leaving_radiance_on_incident_irradiance
+        #  "reﬂectance based on the water-leaving radiance and the incident irradiance" (Ocean Optics Web Book)
+        std_name, std_unit = get_cf_std_name(alias=var)
+
+        data_var.units = std_unit
+        data_var.standard_name = std_name
+        #data_var.long_name = ''
+
+        # self.__dst.variables['Rrs'].valid_min = 0
+        # self.__dst.variables['Rrs'].valid_max = 6000
+        data_var.missing_value = self.no_data
+
+        '''
+        scale_factor is used by NetCDF CF in writing and reading
+        Reading: multiply by the scale_factor and add the add_offset
+        Writing: subtract the add_offset and divide by the scale_factor
+        If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
+        reciprocal of it.
+        '''
+        data_var.scale_factor = self.scale_factor
+        data_var.add_offset = 0
+
+    def to_nc(self):
+        """
+        TODO : Wrapper for create_dataset_nc, create_var_nc, write_var_nc, close_nc ?
+        Returns
+        -------
+        """
+
+    def from_nc(self, nc_file):
+        """ Populate ReveCube object from NetCDF dataset
+
+        Parameters
+        ----------
+        nc_file: str
+            NetcCDF (.nc) CF-1.0 compliant file to read from
+
+        Returns
+        -------
+        """
+
+        if os.path.isfile(nc_file):
+            net_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
+            self.net_ds = net_ds
+        else:
+            raise Exception(f"File {nc_file} does not exist")
+
+        # TODO: this is variable specific
+        self.no_data = None
+        self.scale_factor = None
+        self.proj_var = None
+
+        # Radiometric attributes
+        wavelength_var = net_ds.variables['W']
+        self.wavelength = wavelength_var[:].data
+
+        # Geographic attributes
+        altitude_var = net_ds.variables['Z']
+        self.z = altitude_var[:][0] # As we have only one altitude, could be a scalar
+
+        grid_mapping = net_ds.variables['grid_mapping']
+        #pyproj.CRS.from_cf()
+        self.CRS = pyproj.CRS.from_wkt(grid_mapping.crs_wtk)
+        self.Affine = None
+        self.n_rows = net_ds.dimensions['Y'].size
+        self.n_cols = net_ds.dimensions['X'].size
+
+
+        x_var = net_ds.variables['X']
+        y_var = net_ds.variables['Y']
+        lon_var = net_ds.variables['lon']
+        lat_var = net_ds.variables['lat']
+        self.x = x_var[:].data
+        self.y = y_var[:].data
+        self.lon = lon_var[:].data
+        self.lat = lat_var[:].data
+        self.lon_grid, self.lat_grid = None, None
+        self.center_lon, self.center_lat = lon_var[round(len(self.x)/2)].data, lat_var[round(len(self.y)/2)].data
+
+        # Time attributes
+        time_var = net_ds.variables['T']
+
+        self.acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
+        self.acq_time_local = None, None
+        self.central_lon_local_timezone = None
+
+        # Geometric attributes
+        self.solar_zenith = None
+        self.solar_azimuth = None
+
+        self.viewing_zenith = None
+        self.view_azimuth = None
+        self.relative_azimuth = None
+        self.sample_index = None

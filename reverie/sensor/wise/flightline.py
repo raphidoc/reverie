@@ -83,7 +83,7 @@ class FlightLine():
         self.sample_center = [self.resolution_x*s +self.resolution_x/2 for s in range(samples)]
 
 
-    def __calNadirX(self):
+    def _calNadirX(self):
         '''
         calculate the Nadir position in each scanning line
         :return:  nadir point (pixel), nadir point (meter)
@@ -94,29 +94,27 @@ class FlightLine():
         return nadir_x, nadir
 
 
-    def calSZA_AZA(self):
+    def cal_view_geom(self):
         '''
-        calculate sensor zenith angle and azimuth angle
-        :return: (SZA,AZA)
+        calculate viewing zenith and azimuth angle
+        :return: zenith, azimuth
         '''
-        # print('calculating veiwing zenith and azimuth angle of flight line.....')
-        # start_time = pendulum.now()
 
-        nadir_x, nadir = self.__calNadirX()
-        sza = np.rad2deg(np.arctan(np.abs(nadir - np.asarray(self.sample_center))/self.height))
+        nadir_x, nadir = self._calNadirX()
+        vz = np.rad2deg(np.arctan(np.abs(nadir - np.asarray(self.sample_center))/self.height))
+
+        # Convert heading to 0, 360 range
+        azimuth = self.heading
+
+        if azimuth < 0:
+            azimuth += 360
 
         # Right Wing
-        aza_ = 90+self.heading if  (90+self.heading)<360 else self.heading-270
-        aza = np.full_like(sza,aza_)
+        va_ = azimuth+90
+        va = np.full_like(vz, va_)
 
         # Left Wing
-        aza[nadir_x:] = 180+90+self.heading if (180+90+self.heading)<360 else self.heading-90
+        va[nadir_x:] = azimuth-90
 
-        # aza_ = 180+90+self.heading if (180+90+self.heading)<360 else self.heading-90
-        # aza = np.full_like(sza,aza_)
-        # aza[nadir_x:] = 90+self.heading if  (90+self.heading)<360 else self.heading-270
-
-
-        # print("took {} seconds".format((pendulum.now()-start_time).seconds))
-        return np.tile(sza,(self.lines,1)), np.tile(aza,(self.lines,1))
+        return np.tile(vz, (self.lines, 1)), np.tile(va, (self.lines, 1))
 
