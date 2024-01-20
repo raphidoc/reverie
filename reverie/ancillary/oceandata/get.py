@@ -13,9 +13,7 @@ from .interp_gmao import interp_gmao
 
 def get(dt: datetime.datetime,
         lon, lat,
-        local_dir=None,
-        kind='linear',
-        keep_series=False):
+        local_dir=None):
 
     isodate = dt.isoformat() #'2019-08-18T17:34:56+00:00'
     ftime = dt.hour + dt.minute/60 + dt.second/3600
@@ -37,40 +35,19 @@ def get(dt: datetime.datetime,
     # download files
     local_files = []
     for anc_file in anc_files:
-        local_files.append(download(anc_file))
+        local_files.append(download(anc_file, local_dir))
 
-    ## find if we have merra2 files
-    gmao_files = [file for file in local_files if ('GMAO_MERRA2' in os.path.basename(file)) & (os.path.exists(file))]
-    if len(gmao_files) == 0: gmao_files = [file for file in local_files if ('GMAO_FP' in os.path.basename(file)) & (os.path.exists(file))]
-    if len(gmao_files) == 2:
+    ## find if we have 2 merra2 files
+    if len(local_files) == 2:
 
-        print('Using GMAO GEOS ancillary data:')
-        for file in gmao_files: print(file)
+        print('Using GMAO GEOS ancillary data %s:' %local_files)
 
-        ## set up ancillary
-        anc = {'date':dt, 'lon':lon, 'lat': lat, 'ftime':ftime, 'type': 'merra2', 'data': {}}
-        anc_gmao = interp_gmao(gmao_files,  lon, lat, isodate, method=kind)
-        for k in anc_gmao.keys():
-            if (not keep_series) & ('series' in anc_gmao[k]): del anc_gmao[k]['series']
-            anc['data'][k] = anc_gmao[k]
+        anc_gmao = interp_gmao(local_files,  lon, lat, dt)
 
-    anc_keys = None
-    anc_fact = None
-
-    ## rescale ancillary data
+    # scale ancillary data
     anc_name = ['uoz', 'uwv', 'z_wind', 'm_wind', 'pressure']
-    if anc['type'] == 'ncep':
-        anc_keys = ['ozone', 'p_water', 'z_wind', 'm_wind', 'press']
-        anc_fact = [1./1000., 1./10., 1., 1., 1.]
-    elif anc['type'] == 'merra2':
-        anc_keys = ['TO3', 'TQV', 'U10M', 'V10M', 'PS']
-        anc_fact = [1./1000., 1./10., 1., 1., 1./100.]
+    anc_keys = ['TO3', 'TQV', 'U10M', 'V10M', 'PS']
+    anc_fact = [1./1000., 1./10., 1., 1., 1./100.]
 
-    for i, k in enumerate(anc_keys):
-        if k not in anc['data']: continue
-        anc[anc_name[i]] = anc['data'][k]['interp'] * anc_fact[i]
-    ## compute wind speed
-    if ('z_wind' in anc) & ('m_wind' in anc):
-        anc['wind'] = (((anc['z_wind'])**2) + ((anc['m_wind'])**2))**0.5
 
     return anc

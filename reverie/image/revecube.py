@@ -437,7 +437,7 @@ class ReveCube(ABC):
         else:
             raise Exception(f"File {nc_file} does not exist")
 
-        # TODO: this is variable specific
+        # TODO: this not global but variable specific
         self.no_data = None
         self.scale_factor = None
         self.proj_var = None

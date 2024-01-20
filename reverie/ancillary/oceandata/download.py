@@ -5,17 +5,15 @@ modified by Raphael Mabit (2024-01-18)
 """
 
 import os
-import datetime
 import netrc
 
-import pathlib
 import urllib.parse
 import requests
 
 
 def download(
         anc_file: str,
-        dest_dir='/D/Data/TEST/TEST_WISE/MC-50/',
+        local_dir=None,
         override=False,
         oceandata_url = "https://oceandata.sci.gsfc.nasa.gov/ob/getfile/"):
 
@@ -23,7 +21,7 @@ def download(
 
     file_url = urllib.parse.urljoin(oceandata_url, anc_file)
 
-    local_file = os.path.join(dest_dir, anc_file)
+    local_file = os.path.join(local_dir, anc_file)
 
     if os.path.exists(local_file) & (not override):
         print('File %s exists' % local_file)

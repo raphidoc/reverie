@@ -1,21 +1,19 @@
 # Standard library imports
 import os
 import time
+from datetime import datetime
 
 # Third party imports
 from osgeo import gdal
-import netCDF4
 from tqdm import tqdm
 import numpy as np
-import pyproj
 import re
-import pendulum
 
 # REVERIE import
 from reverie.image import ReveCube
 from .flightline import FlightLine
 from reverie.utils import helper
-from reverie.utils.tile import Tile
+# from reverie.utils.tile import Tile
 
 gdal.UseExceptions()
 
@@ -127,11 +125,11 @@ class Pix(ReveCube):
 
         # When in debugging mode with pdb, have to pass class and self to super(Pix, self)
         # see https://stackoverflow.com/questions/53508770/python-3-runtimeerror-super-no-arguments
-        # TODO: Not even needed to call super().cal_coordinate ?
         self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
 
         # Define time for the image
-        self.acq_time_z = pendulum.parse(self.header['acquisition time'], )
+        # datetime.strptime("21/11/06T16:30:00Z", "%d/%m/%yT%H:%M:%SZ")
+        self.acq_time_z = datetime.strptime(self.header['acquisition time'], "%Y-%m-%dT%H:%M:%SZ")
 
         self.cal_time(self.center_lon, self.center_lat)
 
