@@ -13,6 +13,7 @@ import re
 from reverie.image import ReveCube
 from .flightline import FlightLine
 from reverie.utils import helper
+
 # from reverie.utils.tile import Tile
 
 gdal.UseExceptions()
@@ -38,7 +39,6 @@ class Pix(ReveCube):
     """
 
     def __init__(self, image_dir, image_name):
-
         t0 = time.perf_counter()
 
         # TODO: Need to learn more about super(), inheritance and composition.
@@ -50,8 +50,8 @@ class Pix(ReveCube):
             raise ValueError("image_dir does not exist")
 
         # WISE radiometric data
-        self.hdr_f = os.path.join(image_dir, image_name + '-L1G.pix.hdr')
-        self.pix_f = os.path.join(image_dir, image_name + '-L1G.pix')
+        self.hdr_f = os.path.join(image_dir, image_name + "-L1G.pix.hdr")
+        self.pix_f = os.path.join(image_dir, image_name + "-L1G.pix")
 
         if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
             print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
@@ -70,21 +70,25 @@ class Pix(ReveCube):
         # Vertical axis: lines = rows = height = y
         # self.src_ds.RasterXSize
         # Horizontal axis: samples = columns = width = x
-        self.n_rows = int(self.header['lines'])
-        self.n_cols = int(self.header['samples'])
-        self.n_bands = int(self.header['bands'])
-        self.wavelength = np.array([float(w) for w in self.header['wavelength'].split(',')])
+        self.n_rows = int(self.header["lines"])
+        self.n_cols = int(self.header["samples"])
+        self.n_bands = int(self.header["bands"])
+        self.wavelength = np.array(
+            [float(w) for w in self.header["wavelength"].split(",")]
+        )
 
         # Define data type, unit, scale factor, offset, and ignore values
-        dtype = int(self.header['data type'])
+        dtype = int(self.header["data type"])
         if dtype == 1:
-            self.dtype = np.dtype('uint8')
+            self.dtype = np.dtype("uint8")
         if dtype == 2:
-            self.dtype = np.dtype('int16')
+            self.dtype = np.dtype("int16")
 
         # TODO: how to deal with unit parsing ? Should we at all ? Just ask the user ?
-        self.unit = 'uW cm-2 nm-1 sr-1'
-        unit_res = {key: val for key, val in self.header.items() if re.search(f"unit", key)}
+        self.unit = "uW cm-2 nm-1 sr-1"
+        unit_res = {
+            key: val for key, val in self.header.items() if re.search(f"unit", key)
+        }
         print(f"Found unit: {unit_res}\nHard coded unit is: {self.unit}")
         #
         # if len(res) == 0:
@@ -94,15 +98,15 @@ class Pix(ReveCube):
 
         # either 'data scale factor' or 'radiance scale factor' can exist in ENVI hdr
         # self.scale_factor = int(self.Header.metadata['radiance scale factor'])
-        #scale_res = {key: val for key, val in self.header.items() if re.search(f"scale", key)}
-        '''
+        # scale_res = {key: val for key, val in self.header.items() if re.search(f"scale", key)}
+        """
         scale_factor is used by NetCDF CF in writing and reading
         Reading: multiply by the scale_factor and add the add_offset
         Writing: subtract the add_offset and divide by the scale_factor
         If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
         reciprocal of it.
-        '''
-        scale_factor = [val for key, val in self.header.items() if 'scale' in key][0]
+        """
+        scale_factor = [val for key, val in self.header.items() if "scale" in key][0]
         print(f"Read scale factor as: {scale_factor}")
         try:
             scale_factor = int(scale_factor)
@@ -112,44 +116,51 @@ class Pix(ReveCube):
             self.scale_factor = float(scale_factor)
         print(f"Converted scale factor as: {self.scale_factor}")
 
-
-        ignore_value = self.header['data ignore value']
-        if ignore_value == '':
+        ignore_value = self.header["data ignore value"]
+        if ignore_value == "":
             self.no_data = -99999
         else:
             self.no_data = int(ignore_value)
 
         # Define image coordinate system from 'map info'
-        map_info = self.header['map info']
-        self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)\
-
+        map_info = self.header["map info"]
+        self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)
         # When in debugging mode with pdb, have to pass class and self to super(Pix, self)
         # see https://stackoverflow.com/questions/53508770/python-3-runtimeerror-super-no-arguments
         self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
 
         # Define time for the image
         # datetime.strptime("21/11/06T16:30:00Z", "%d/%m/%yT%H:%M:%SZ")
-        self.acq_time_z = datetime.strptime(self.header['acquisition time'], "%Y-%m-%dT%H:%M:%SZ")
+        self.acq_time_z = datetime.strptime(
+            self.header["acquisition time"], "%Y-%m-%dT%H:%M:%SZ"
+        )
 
         self.cal_time(self.center_lon, self.center_lat)
 
         # Geocorrection Look Up tables
-        self.glu_hdr_f = os.path.join(image_dir, image_name + '-L1A.glu.hdr')
-        self.glu_f = os.path.join(image_dir, image_name + '-L1A.glu')
+        self.glu_hdr_f = os.path.join(image_dir, image_name + "-L1A.glu.hdr")
+        self.glu_f = os.path.join(image_dir, image_name + "-L1A.glu")
 
         # Navigation data: altitude, heading, pitch, roll, speed
-        self.nav_f = os.path.join(image_dir, image_name + '-Navcor_sum.log')
+        self.nav_f = os.path.join(image_dir, image_name + "-Navcor_sum.log")
 
-        if not os.path.isfile(self.glu_hdr_f) or not os.path.isfile(self.glu_f) or not os.path.isfile(self.nav_f):
-            print("Navigation data or geo correction missing, cannot compute viewing geometry.")
+        if (
+            not os.path.isfile(self.glu_hdr_f)
+            or not os.path.isfile(self.glu_f)
+            or not os.path.isfile(self.nav_f)
+        ):
+            print(
+                "Navigation data or geo correction missing, cannot compute viewing geometry."
+            )
             self.flightline = None
             self.glu_f = None
             self.glu_hdr_f = None
 
         else:
-            self.flightline = FlightLine.from_wise_file(nav_sum_log=self.nav_f, glu_hdr=self.glu_hdr_f)
+            self.flightline = FlightLine.from_wise_file(
+                nav_sum_log=self.nav_f, glu_hdr=self.glu_hdr_f
+            )
             self.z = self.flightline.height
-
 
         # Other instance attribute that need to be instanced before population by methods
         self._valid_mask = None
@@ -162,26 +173,35 @@ class Pix(ReveCube):
 
         t1 = time.perf_counter()
 
-        print(f"DateCube instantiated from class {self.__class__.__name__} in {t1-t0:.2f}s")
+        print(
+            f"DateCube instantiated from class {self.__class__.__name__} in {t1-t0:.2f}s"
+        )
 
     def cal_view_geom(self):
-        '''
+        """
         extract viewing zenith angle
         the orginal data from the flight line is not georeferenced, and the nrows and ncols are not the same as the georeferenced ones
         so, we need to transfer the original viewing geometry to the georefernce grid using the georeference LUT
         :return:
-        '''
+        """
         if self.flightline is None:
-            raise Exception('no flight line found')
+            raise Exception("no flight line found")
 
         glu_data = None
         if self.glu_f is not None:
             glu_data = gdal.Open(self.glu_f)
-            nchannels, nsamples_glu, nlines_glu = glu_data.RasterCount, glu_data.RasterXSize, glu_data.RasterYSize
+            nchannels, nsamples_glu, nlines_glu = (
+                glu_data.RasterCount,
+                glu_data.RasterXSize,
+                glu_data.RasterYSize,
+            )
             if nchannels != 3:
-                raise Exception('the glu file does not have three channels')
-            if nsamples_glu != self.flightline.samples or nlines_glu != self.flightline.lines:
-                raise Exception('samples or lines of flightline and glu do not match')
+                raise Exception("the glu file does not have three channels")
+            if (
+                nsamples_glu != self.flightline.samples
+                or nlines_glu != self.flightline.lines
+            ):
+                raise Exception("samples or lines of flightline and glu do not match")
 
         # data_glu =  glu_data.ReadAsArray()
 
@@ -192,8 +212,9 @@ class Pix(ReveCube):
         # v_zenith_fl, v_azimuth_fl = v_zenith_fl.flatten(), v_azimuth_fl.flatten()
 
         ## initialize viewing zenith and azimuth with default values
-        v_zenith_level1, v_azimuth_level1 = np.full((self.n_rows, self.n_cols), np.nan), np.full((self.n_rows, self.n_cols),
-                                                                                                 np.nan)
+        v_zenith_level1, v_azimuth_level1 = np.full(
+            (self.n_rows, self.n_cols), np.nan
+        ), np.full((self.n_rows, self.n_cols), np.nan)
         # Initiate the sample position on spatial dimension of the imaging spectrometer array
         v_sample_array = np.full((self.n_rows, self.n_cols), np.nan)
 
@@ -211,10 +232,12 @@ class Pix(ReveCube):
         #
         # del v_zenith_fl, v_azimuth_fl,x_glu,y_glu
         # self.viewing_zenith, self.viewing_azimuth =  v_zenith_level1, v_azimuth_level1
-        for row in tqdm(range(self.flightline.lines), desc='Processing GLU'):
+        for row in tqdm(range(self.flightline.lines), desc="Processing GLU"):
             xs, ys = x_glu[row], y_glu[row]
             # print(xs,ys)
-            rows_c, cols_c = helper.transform_rowcol(self.Affine, xs=xs, ys=ys, precision=5)
+            rows_c, cols_c = helper.transform_rowcol(
+                self.Affine, xs=xs, ys=ys, precision=5
+            )
             mask = (rows_c < self.n_rows) & (cols_c < self.n_cols)
             # print(np.max(rows_c),np.max(cols_c))
             rows_c = rows_c[mask]
@@ -224,11 +247,11 @@ class Pix(ReveCube):
             v_azimuth_level1[rows_c, cols_c] = v_azimuth_fl[row][mask]
 
             # Accros-track samples position on the spatial dimension of the imaging spectrometer array
-            v_sample_array[rows_c, cols_c] = np.arange(0,self.flightline.samples)[mask]
+            v_sample_array[rows_c, cols_c] = np.arange(0, self.flightline.samples)[mask]
 
-        self.viewing_zenith = helper.FillNA2D(v_zenith_level1)
-        self.view_azimuth = helper.FillNA2D(v_azimuth_level1)
-        self.sample_index = helper.FillNA2D(v_sample_array)
+        self.viewing_zenith = helper.fill_na_2d(v_zenith_level1)
+        self.view_azimuth = helper.fill_na_2d(v_azimuth_level1)
+        self.sample_index = helper.fill_na_2d(v_sample_array)
 
         self.viewing_zenith[~self.get_valid_mask()] = np.nan
         self.view_azimuth[~self.get_valid_mask()] = np.nan

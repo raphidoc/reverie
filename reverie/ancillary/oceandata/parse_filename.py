@@ -21,19 +21,19 @@ def parse_filename(dt: datetime.datetime):
     anc_files = []
     if "GMAO_MERRA2_MET" in file_types:
         # Select hour before observation time
-        yyyymmdd = dt.strftime('%Y%m%d')
+        yyyymmdd = dt.strftime("%Y%m%d")
         hh = str(dt.hour).zfill(2)
         cfile = f"GMAO_MERRA2.{yyyymmdd}T{hh}0000.MET.nc"
         anc_files.append(cfile)
 
         # Handle change of day to select hour after observation time
-        if hh < '23':
+        if hh < "23":
             hh = str(dt.hour + 1).zfill(2)
             cfile = f"GMAO_MERRA2.{yyyymmdd}T{hh}0000.MET.nc"
             anc_files.append(cfile)
         else:
             yyyymmdd = (dt + datetime.timedelta(days=1)).strftime("%Y%m%d")
-            hh = '00'
+            hh = "00"
             cfile = f"GMAO_MERRA2.{yyyymmdd}T{hh}0000.MET.nc"
             anc_files.append(cfile)
 

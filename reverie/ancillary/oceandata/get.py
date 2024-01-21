@@ -8,14 +8,11 @@ from .download import download
 from .interp_gmao import interp_gmao
 
 
-def get(dt: datetime.datetime,
-        lon, lat,
-        local_dir=None):
-
+def get(dt: datetime.datetime, lon, lat, local_dir=None):
     isodate = dt.isoformat()
 
-    if isodate < '1978-10-27':
-        print(f'Scene too old to get ancillary data: {isodate}')
+    if isodate < "1978-10-27":
+        print(f"Scene too old to get ancillary data: {isodate}")
         return
 
     # list ancillary files to download
@@ -26,7 +23,7 @@ def get(dt: datetime.datetime,
     for anc_file in anc_files:
         local_files.append(download(anc_file, local_dir))
 
-    print('Using GMAO GEOS ancillary data %s:' % local_files)
+    print("Using GMAO GEOS ancillary data %s:" % local_files)
 
     anc_gmao = interp_gmao(local_files, lon, lat, dt)
 

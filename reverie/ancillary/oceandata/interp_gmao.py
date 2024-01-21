@@ -30,9 +30,13 @@ def interp_gmao(files, lon, lat, dt):
 
         """
         ds = ds.assign_coords(
-            {'T': datetime.strptime(ds.time_coverage_start, "%Y-%m-%dT%H:%M:%SZ").timestamp()}
+            {
+                "T": datetime.strptime(
+                    ds.time_coverage_start, "%Y-%m-%dT%H:%M:%SZ"
+                ).timestamp()
+            }
         )
-        ds = ds.expand_dims('T')
+        ds = ds.expand_dims("T")
         return ds
 
     net_ds = xr.open_mfdataset(files, preprocess=prepro_gmao, parallel=False)

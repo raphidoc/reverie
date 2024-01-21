@@ -12,10 +12,11 @@ import requests
 
 
 def download(
-        anc_file: str,
-        local_dir=None,
-        override=False,
-        oceandata_url="https://oceandata.sci.gsfc.nasa.gov/ob/getfile/"):
+    anc_file: str,
+    local_dir=None,
+    override=False,
+    oceandata_url="https://oceandata.sci.gsfc.nasa.gov/ob/getfile/",
+):
     # TODO: use tempfile to manage temporary data or persistent save in processing dir ?
 
     file_url = urllib.parse.urljoin(oceandata_url, anc_file)
@@ -23,15 +24,15 @@ def download(
     local_file = os.path.join(local_dir, anc_file)
 
     if os.path.exists(local_file) & (not override):
-        print('File %s exists' % local_file)
+        print("File %s exists" % local_file)
 
     else:
         if not os.path.exists(os.path.dirname(local_file)):
             os.makedirs(os.path.dirname(local_file))
-        print('Downloading file %s' % anc_file)
+        print("Downloading file %s" % anc_file)
 
         nr = netrc.netrc()
-        auth = nr.authenticators('earthdata')
+        auth = nr.authenticators("earthdata")
         auth = (auth[0], auth[2])
 
         with requests.Session() as session:
@@ -42,6 +43,6 @@ def download(
                 for chunk in data_rep.iter_content(chunk_size=10 * 1024):
                     file.write(chunk)
 
-        print('Finished downloading file %s' % anc_file)
+        print("Finished downloading file %s" % anc_file)
 
     return local_file
