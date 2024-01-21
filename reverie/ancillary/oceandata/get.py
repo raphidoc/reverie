@@ -31,8 +31,8 @@ def get(dt: datetime.datetime,
     anc_gmao = interp_gmao(local_files, lon, lat, dt)
 
     # scale ancillary data
-    anc_name = ['uoz', 'uwv', 'z_wind', 'm_wind', 'pressure']
-    anc_keys = ['TO3', 'TQV', 'U10M', 'V10M', 'PS']
-    anc_fact = [1. / 1000., 1. / 10., 1., 1., 1. / 100.]
+    # anc_name = ['uoz', 'uwv', 'z_wind', 'm_wind', 'pressure']
+    # anc_keys = ['TO3', 'TQV', 'U10M', 'V10M', 'PS']
+    # anc_fact = [1. / 1000., 1. / 10., 1., 1., 1. / 100.]
 
     return anc_gmao

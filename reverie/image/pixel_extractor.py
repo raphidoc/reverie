@@ -8,42 +8,44 @@ import pyproj
 
 
 class PixelExtractor():
-    def __init__(self):
+    def __init__(self, nc_file: str):
 
-        if os.path.isfile(NCFilePath):
-            self.NetDS = xr.open_dataset(NCFilePath, mask_and_scale=True)
+        if os.path.isfile(nc_file):
+            self.NetDS = xr.open_dataset(nc_file)
         else:
             raise ValueError('File not found')
 
-        DataVars = list(self.NetDS.data_vars)
+        self.match_gdf = None
+
+        data_vars = list(self.NetDS.data_vars)
 
         # The first variable is the proj_var
-        self.CRS = pyproj.CRS.from_wkt(self.NetDS[DataVars[0]].crs_wtk)
+        self.CRS = pyproj.CRS.from_wkt(self.NetDS[data_vars[0]].crs_wtk)
 
         # The rest is the actual data
-        self.VarName = DataVars[1:]
+        self.VarName = data_vars[1:]
 
-    def assing_matchup(self, MatchupF, Vars=None):
+    def assing_matchup(self, matchup_file: str):
         '''
         Method to read a data frame with potential matchups to be extracted by `exctract_pixel`
         Data Frame is read as csv (sep = , decimal = .)
         Must have the column "DateTime", "Lon", "Lat", "UUID"
         '''
 
-        MatchDF = pd.read_csv(MatchupF)
-        MatchDF = MatchDF[["DateTime", "Lon", "Lat", "UUID"]]
+        match_df = pd.read_csv(matchup_file)
+        match_df = match_df[["DateTime", "Lon", "Lat", "UUID"]]
 
         # When matchup data is in long format
-        MatchDF = MatchDF.drop_duplicates()
+        match_df = match_df.drop_duplicates()
 
-        Geometry = gpd.points_from_xy(MatchDF['Lon'], MatchDF['Lat'], crs="EPSG:4326")
+        match_geometry = gpd.points_from_xy(match_df['Lon'], match_df['Lat'], crs="EPSG:4326")
 
-        MatchGDF = gpd.GeoDataFrame(MatchDF, geometry=Geometry)
+        match_gdf = gpd.GeoDataFrame(match_df, geometry=match_geometry)
 
         print(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
-        MatchGDF = MatchGDF.to_crs(self.CRS.to_epsg())
+        match_gdf = match_gdf.to_crs(self.CRS.to_epsg())
 
-        self.MatchGDF = MatchGDF
+        self.match_gdf = match_gdf
 
         # print('Removing in-situ observations outside of true image extent (excluding NoData)')
         #
@@ -80,7 +82,7 @@ class PixelExtractor():
         # ax.scatter(xs, ys)
         # plt.show()
 
-    def extract_pixel(self, Vars=None):
+    def extract_pixel(self):
         '''
         Method to exctract the pixel matchups defined by `assigned_matchup`
         Should provide a way to select variables to be extracted
@@ -89,45 +91,43 @@ class PixelExtractor():
         '''
 
         # TODO manage the variables to be extracted, either read from all available variable or user input
-        if Vars == None:
-            Vars = self.VarName
+        #   Take a look at the method isel_window(window: Window, pad: bool = False)
 
-        NetDS = self.NetDS
-        MatchGDF = self.MatchGDF
+        net_ds = self.NetDS
+        match_gdf = self.match_gdf
 
-        MSIPixEx = pd.DataFrame()
+        pixex_df = pd.DataFrame()
 
-        # x = self.MatchGDF['UUID'][0]
+        # x = self.match_gdf['UUID'][0]
 
-        for x in tqdm(MatchGDF['UUID'], desc='Extracting pixels'):
-            TempGDF = MatchGDF[MatchGDF['UUID'] == x].reset_index()
-            TempPixExArray = NetDS.sel(
-                x=shapely.get_x(TempGDF.geometry)[0],
-                y=shapely.get_y(TempGDF.geometry)[0],
-                # isodate=pd.to_datetime(TempGDF['DateTime'][0]),
+        for x in tqdm(match_gdf['UUID'], desc='Extracting pixels'):
+            temp_gdf = match_gdf[match_gdf['UUID'] == x].reset_index()
+            temp_pix_ex_array = net_ds.sel(
+                x=shapely.get_x(temp_gdf.geometry)[0],
+                y=shapely.get_y(temp_gdf.geometry)[0],
+                # isodate=pd.to_datetime(temp_gdf['DateTime'][0]),
                 method='nearest')
 
             # For some reason the Sensor variable create an error with to_dataframe().
             # Seems to be linked to the data type (string, <U7 or object)
-            # TempPixExDF = TempPixExArray.to_array(name='Values')
-            # TempPixExDF = TempPixExArray.to_dataframe(name='Values')
-            TempPixExDF = TempPixExArray.to_dataframe()
-            TempPixExDF = TempPixExDF.rename_axis('Wavelength')
-            TempPixExDF = TempPixExDF.reset_index()
+            # temp_pixex_df = temp_pix_ex_array.to_array(name='Values')
+            # temp_pixex_df = temp_pix_ex_array.to_dataframe(name='Values')
+            temp_pixex_df = temp_pix_ex_array.to_dataframe()
+            temp_pixex_df = temp_pixex_df.rename_axis('Wavelength')
+            temp_pixex_df = temp_pixex_df.reset_index()
             # TODO output a wide format when wavelength and non wavelength data are mixed
-            #TempPixExDF = pd.pivot(TempPixExDF, index=['x', 'y'], columns='Wavelength', values='Lt')
-            TempPixExDF['UUID'] = x
-            # TempPixExDF['Sensor'] = str(TempPixExArray.Sensor.values)
-            # TempPixExDF['ImageDate'] = str(TempPixExArray.coords['isodate'].values)
-            # TempPixExDF['AtCor'] = 'ac4icw'
+            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='Lt')
+            temp_pixex_df['UUID'] = x
+            # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
+            # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)
+            # temp_pixex_df['AtCor'] = 'ac4icw'
 
-            MSIPixEx = pd.concat([MSIPixEx, TempPixExDF])
+            pixex_df = pd.concat([pixex_df, temp_pixex_df])
 
-        # MSIPixEx.columns = ['_'.join(str(col)).strip() for col in MSIPixEx.columns.values]
-        # MSIPixEx.reset_index(inplace=True)
-        #MSIPixEx = pd.DataFrame(MSIPixEx.to_records())
-        #MSIPixEx.columns = MSIPixEx.columns.str.replace(r"\(|'|\)|,|\s(?!\d)", "", regex=True)
-        #MSIPixEx.columns = MSIPixEx.columns.str.replace(r" ", "_", regex=True)
-        return MSIPixEx
+        # pixex_df.columns = ['_'.join(str(col)).strip() for col in pixex_df.columns.values]
+        # pixex_df.reset_index(inplace=True)
+        # pixex_df = pd.DataFrame(pixex_df.to_records())
+        # pixex_df.columns = pixex_df.columns.str.replace(r"\(|'|\)|,|\s(?!\d)", "", regex=True)
+        # pixex_df.columns = pixex_df.columns.str.replace(r" ", "_", regex=True)
+        return pixex_df
 
-        # Take a look at the method isel_window(window: Window, pad: bool = False)

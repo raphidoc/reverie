@@ -1,18 +1,12 @@
 # Standard library imports
-import array
 import os
-from abc import ABC, abstractmethod
+from abc import ABC
 import datetime
 
 # Third party imports
-from osgeo import gdal
 import netCDF4
-import cfunits
-from tqdm import tqdm
 import numpy as np
 import pyproj
-import re
-import pendulum
 
 # REVERIE import
 from reverie.utils import helper
@@ -54,32 +48,95 @@ class ReveCube(ABC):
     cal_coordinate(): Compute the x, y projected coordinate from Affine, n_rows, n_cols and CRS
     """
 
-    def __init__(self):
+    @classmethod
+    def from_nc(cls, nc_file):
+        """ Populate ReveCube object from NetCDF dataset
 
-        # Datasets attribute
+        Parameters
+        ----------
+        nc_file: str
+            NetcCDF (.nc) CF-1.0 compliant file to read from
+
+        Returns
+        -------
+        """
+
+        if os.path.isfile(nc_file):
+            net_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
+        else:
+            raise Exception(f"File {nc_file} does not exist")
+
+        # TODO: better define the attributes to be read from the NetCDF file
+        #  write all attribute that should be read from the NetCDF file
+
+        # Radiometric attributes
+        wavelength_var = net_ds.variables['W']
+        wavelength = wavelength_var[:].data
+
+        # Geographic attributes
+        altitude_var = net_ds.variables['Z']
+        z = altitude_var[:][0] # As we have only one altitude, could be a scalar
+
+        grid_mapping = net_ds.variables['grid_mapping']
+        crs = pyproj.CRS.from_wkt(grid_mapping.crs_wtk)
+        affine = None
+        n_rows = net_ds.dimensions['Y'].size
+        n_cols = net_ds.dimensions['X'].size
+
+        x_var = net_ds.variables['X']
+        y_var = net_ds.variables['Y']
+        lon_var = net_ds.variables['lon']
+        lat_var = net_ds.variables['lat']
+        x = x_var[:].data
+        y = y_var[:].data
+        lon = lon_var[:].data
+        lat = lat_var[:].data
+        lon_grid, lat_grid = None, None
+        center_lon, center_lat = lon_var[round(len(x) / 2)].data, lat_var[round(len(y) / 2)].data
+
+        # Time attributes
+        time_var = net_ds.variables['T']
+
+        acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
+        acq_time_local = None, None
+        central_lon_local_timezone = None
+
+        return cls(net_ds, wavelength, z, affine, n_rows, n_cols, crs, x, y,
+                   lon, lat, lon_grid, lat_grid, center_lon, center_lat, acq_time_z,
+                   acq_time_local, central_lon_local_timezone)
+
+    def __init__(self, net_ds: netCDF4.Dataset, wavelength: np.ndarray, z: float, affine, n_rows: int, n_cols: int,
+                 crs: pyproj.crs.CRS, x: np.ndarray, y: np.ndarray, lon: np.ndarray, lat: np.ndarray,
+                 lon_grid: np.ndarray, lat_grid: np.ndarray, center_lon: float, center_lat: float,
+                 acq_time_z: datetime.datetime, acq_time_local: datetime.datetime,
+                 central_lon_local_timezone: float):
+
+        # Dataset attribute
         self.src_ds = None
-        self.net_ds = None
+        self.net_ds = net_ds
+        self.sensor = None
         self.no_data = None
+        self._valid_mask = None
         # TODO: scale factor should be handled variable specific
         #  it might not be appropriate to apply the same to radiometric and geometric data for example
         self.scale_factor = None
         self.proj_var = None
 
         # Radiometric attributes
-        self.wavelength = None
+        self.wavelength = wavelength
 
         # Geographic attributes
         # Altitude (z) could alternatively belong the Geometric attributes ?
-        self.z = None
-        self.Affine, self.n_rows, self.n_cols, self.CRS = None, None, None, None
+        self.z = z
+        self.Affine, self.n_rows, self.n_cols, self.CRS = affine, n_rows, n_cols, crs
 
-        self.x, self.y, self.lon, self.lat = None, None, None, None
-        self.lon_grid, self.lat_grid = None, None
-        self.center_lon, self.center_lat = None, None
+        self.x, self.y, self.lon, self.lat = x, y, lon, lat
+        self.lon_grid, self.lat_grid = lon_grid, lat_grid
+        self.center_lon, self.center_lat = center_lon, center_lat
 
         # Time attributes
-        self.acq_time_z, self.acq_time_local = None, None
-        self.central_lon_local_timezone = None
+        self.acq_time_z, self.acq_time_local = acq_time_z, acq_time_local
+        self.central_lon_local_timezone = central_lon_local_timezone
 
         # Geometric attributes
         self.solar_zenith = None
@@ -94,7 +151,11 @@ class ReveCube(ABC):
         self.PixelExtractor = None
 
     def __str__(self):
-        print("")
+        print(f"Image from sensor {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}\r\n"
+              f"Central longitude: {self.center_lon:.3f}E\r\n"
+              f"Central latitude: {self.center_lat:.3f}N\r\n"
+              f"shape: x:{self.x.shape}, y:{self.y.shape}\r\n"
+              f"wavelength: {self.wavelength}\r\n")
 
 
     def cal_coordinate(self, affine, n_rows, n_cols, crs):
@@ -169,17 +230,16 @@ class ReveCube(ABC):
         print(f"central longitude of {tz}:{self.central_lon_local_timezone}")
 
     def cal_sun_geom(self):
-        '''
+        """
         calculate solar zenith angle and azimuth angle
         :return:
-        '''
-        hourAngle = helper.calSolarHourAngel(self.lon_grid, self.central_lon_local_timezone, self.acq_time_local)
+        """
+        hour_angle = helper.calSolarHourAngel(self.lon_grid, self.central_lon_local_timezone, self.acq_time_local)
 
-        ## year, month and day
         year, month, day = self.acq_time_z.year, self.acq_time_z.month, self.acq_time_z.day
 
         declination = helper.calDeclination(year, month, day)
-        self.solar_zenith, self.solar_azimuth = helper.calSolarZenithAzimuth(self.lat_grid, hourAngle, declination)
+        self.solar_zenith, self.solar_azimuth = helper.calSolarZenithAzimuth(self.lat_grid, hour_angle, declination)
 
         self.solar_zenith[~self.get_valid_mask()] = np.nan
         self.solar_azimuth[~self.get_valid_mask()] = np.nan
@@ -195,7 +255,7 @@ class ReveCube(ABC):
         if tile is None:
             return self._valid_mask
         else:
-            return self._valid_mask[tile.sline:tile.eline,tile.spixl:tile.epixl]
+            return self._valid_mask[tile.sline:tile.eline, tile.spixl:tile.epixl]
 
     def cal_valid_mask(self):
         """
@@ -227,10 +287,10 @@ class ReveCube(ABC):
         return Lt
 
     def cal_relative_azimuth(self):
-        '''
+        """
         calculate relative azimuth angle
         :return:
-        '''
+        """
         self.relative_azimuth = np.abs(self.view_azimuth - self.solar_azimuth)
 
     #@abstractmethod
@@ -258,7 +318,8 @@ class ReveCube(ABC):
             print(e)
             return
 
-        # TODO validate that it follow the convention with cfdm / cf-python. For compatibility with GDAL NetCDF driver use CF-1.0
+        # TODO validate that it follow the convention with cfdm / cf-python.
+        #  For compatibility with GDAL NetCDF driver use CF-1.0
         net_ds.Conventions = 'CF-1.0'
         net_ds.title = 'Remote sensing image written by REVERIE'
         net_ds.history = 'File created on ' + datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%SZ')
@@ -275,6 +336,13 @@ class ReveCube(ABC):
         net_ds.createDimension('Y', len(self.y))
         net_ds.createDimension('X', len(self.x))
 
+        band_var = net_ds.createVariable('W', 'f4', ('W',))
+        band_var.units = 'nm'
+        band_var.standard_name = 'radiation_wavelength'
+        band_var.long_name = 'Central wavelengths of the sensor bands'
+        band_var.axis = 'Wavelength'
+        band_var[:] = self.wavelength
+
         # Create coordinate variables
         # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
         t_var = net_ds.createVariable('T', 'f4', ('T',))
@@ -282,7 +350,6 @@ class ReveCube(ABC):
         t_var.long_name = 'UTC acquisition time of remote sensing image'
         t_var.units = 'seconds since 1970-01-01 00:00:00'
         t_var.calendar = 'gregorian'
-        #epoch = cfunits.Units('seconds since 1970-01-01 00:00:00')
         t_var[:] = self.acq_time_z.timestamp()
 
         z_var = net_ds.createVariable('Z', 'f4', ('Z',))
@@ -302,7 +369,7 @@ class ReveCube(ABC):
         lat_var = net_ds.createVariable('lat', 'f4', ('Y',))
         lat_var.standard_name = 'latitude'
         lat_var.units = 'degrees_north'
-        #lat_var.long_name = 'latitude'
+        # lat_var.long_name = 'latitude'
         lat_var[:] = self.lat
 
         x_var = net_ds.createVariable('X', 'f4', ('X',))
@@ -315,15 +382,8 @@ class ReveCube(ABC):
         lon_var = net_ds.createVariable('lon', 'f4', ('X',))
         lon_var.standard_name = 'longitude'
         lon_var.units = 'degrees_east'
-        #lon_var.long_name = 'longitude'
+        # lon_var.long_name = 'longitude'
         lon_var[:] = self.lon
-
-        band_var = net_ds.createVariable('W', 'f4', ('W',))
-        band_var.units = 'nm'
-        band_var.standard_name = 'radiation_wavelength' # 'sensor_band_central_radiation_wavelength'
-        band_var.long_name = 'Central wavelengths of the sensor bands'
-        band_var.axis = 'Wavelength'
-        band_var[:] = self.wavelength  # ([round(w, 2) for w in wavelengths])
 
         # grid_mapping
         crs = self.CRS
@@ -361,7 +421,7 @@ class ReveCube(ABC):
         var : str
             Name of the variable to write to the NetCDF dataset
         dimensions : tuple
-            tuple containing the dimension of the var with the form ('W', 'Y', 'X',).
+            Contain the dimension of the var with the form ('W', 'Y', 'X',).
         compression : str, default: 'zlib'
             Name of the compression algorithm to use. Use None to deactivate compression.
         complevel : int, default: 1
@@ -383,8 +443,7 @@ class ReveCube(ABC):
             dimensions=dimensions,
             fill_value=self.no_data,
             compression=compression,
-            complevel=complevel)  # ,
-        # significant_digits=5)
+            complevel=complevel)
 
         data_var.grid_mapping = self.proj_var.name
 
@@ -396,7 +455,7 @@ class ReveCube(ABC):
 
         data_var.units = std_unit
         data_var.standard_name = std_name
-        #data_var.long_name = ''
+        # data_var.long_name = ''
 
         # self.__dst.variables['Rrs'].valid_min = 0
         # self.__dst.variables['Rrs'].valid_max = 6000
@@ -418,69 +477,3 @@ class ReveCube(ABC):
         Returns
         -------
         """
-
-    def from_nc(self, nc_file):
-        """ Populate ReveCube object from NetCDF dataset
-
-        Parameters
-        ----------
-        nc_file: str
-            NetcCDF (.nc) CF-1.0 compliant file to read from
-
-        Returns
-        -------
-        """
-
-        if os.path.isfile(nc_file):
-            net_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
-            self.net_ds = net_ds
-        else:
-            raise Exception(f"File {nc_file} does not exist")
-
-        # TODO: this not global but variable specific
-        self.no_data = None
-        self.scale_factor = None
-        self.proj_var = None
-
-        # Radiometric attributes
-        wavelength_var = net_ds.variables['W']
-        self.wavelength = wavelength_var[:].data
-
-        # Geographic attributes
-        altitude_var = net_ds.variables['Z']
-        self.z = altitude_var[:][0] # As we have only one altitude, could be a scalar
-
-        grid_mapping = net_ds.variables['grid_mapping']
-        #pyproj.CRS.from_cf()
-        self.CRS = pyproj.CRS.from_wkt(grid_mapping.crs_wtk)
-        self.Affine = None
-        self.n_rows = net_ds.dimensions['Y'].size
-        self.n_cols = net_ds.dimensions['X'].size
-
-
-        x_var = net_ds.variables['X']
-        y_var = net_ds.variables['Y']
-        lon_var = net_ds.variables['lon']
-        lat_var = net_ds.variables['lat']
-        self.x = x_var[:].data
-        self.y = y_var[:].data
-        self.lon = lon_var[:].data
-        self.lat = lat_var[:].data
-        self.lon_grid, self.lat_grid = None, None
-        self.center_lon, self.center_lat = lon_var[round(len(self.x)/2)].data, lat_var[round(len(self.y)/2)].data
-
-        # Time attributes
-        time_var = net_ds.variables['T']
-
-        self.acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
-        self.acq_time_local = None, None
-        self.central_lon_local_timezone = None
-
-        # Geometric attributes
-        self.solar_zenith = None
-        self.solar_azimuth = None
-
-        self.viewing_zenith = None
-        self.view_azimuth = None
-        self.relative_azimuth = None
-        self.sample_index = None

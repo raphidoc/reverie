@@ -147,7 +147,7 @@ class Pix(ReveCube):
             self.glu_hdr_f = None
 
         else:
-            self.flightline = FlightLine.FromWISEFile(nav_sum_log=self.nav_f, glu_hdr=self.glu_hdr_f)
+            self.flightline = FlightLine.from_wise_file(nav_sum_log=self.nav_f, glu_hdr=self.glu_hdr_f)
             self.z = self.flightline.height
 
 
