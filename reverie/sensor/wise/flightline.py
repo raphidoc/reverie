@@ -1,8 +1,6 @@
 import os
 import numpy as np
 from pandas import Series
-import spectral.io.envi as envi
-from spectral.io.envi import FileNotAnEnviHeader
 
 from reverie.utils.helper import read_envi_hdr
 

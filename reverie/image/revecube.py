@@ -201,8 +201,6 @@ class ReveCube(ABC):
         self.lon_grid, self.lat_grid = lon_grid, lat_grid
         self.x, self.y, self.lon, self.lat, self.center_lon, self.center_lat = x, y, lon, lat, central_lon, central_lat
 
-        #return x, y, lon, lat, center_lon, center_lat
-
     def cal_time(self, central_lon, central_lat):
         """
         Compute local time of image acquisition

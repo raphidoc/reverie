@@ -130,4 +130,3 @@ class PixelExtractor():
         # pixex_df.columns = pixex_df.columns.str.replace(r"\(|'|\)|,|\s(?!\d)", "", regex=True)
         # pixex_df.columns = pixex_df.columns.str.replace(r" ", "_", regex=True)
         return pixex_df
-
