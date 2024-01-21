@@ -151,11 +151,13 @@ class ReveCube(ABC):
         self.PixelExtractor = None
 
     def __str__(self):
-        print(f"Image from sensor {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}\r\n"
-              f"Central longitude: {self.center_lon:.3f}E\r\n"
-              f"Central latitude: {self.center_lat:.3f}N\r\n"
-              f"shape: x:{self.x.shape}, y:{self.y.shape}\r\n"
-              f"wavelength: {self.wavelength}\r\n")
+        return f"""
+        Image from sensor {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}
+        Central longitude: {self.center_lon:.3f}E
+        Central latitude: {self.center_lat:.3f}N
+        shape: x:{self.x.shape}, y:{self.y.shape}
+        wavelength: {self.wavelength}
+        """
 
 
     def cal_coordinate(self, affine, n_rows, n_cols, crs):
