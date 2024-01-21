@@ -41,9 +41,6 @@ class Pix(ReveCube):
     def __init__(self, image_dir, image_name):
         t0 = time.perf_counter()
 
-        # TODO: Need to learn more about super(), inheritance and composition.
-        super().__init__()
-
         if os.path.isdir(image_dir):
             self.image_dir = image_dir
         else:
@@ -171,10 +168,32 @@ class Pix(ReveCube):
 
         self.cal_relative_azimuth()
 
+        # TODO: Need to learn more about super(), inheritance and composition.
+        super().__init__(
+            net_ds=self.net_ds,
+            wavelength=self.wavelength,
+            z=self.z,
+            affine=self.Affine,
+            n_rows=self.n_rows,
+            n_cols=self.n_cols,
+            crs=self.CRS,
+            x=self.x,
+            y=self.y,
+            lon=self.lon,
+            lat=self.lat,
+            lon_grid=self.lon_grid,
+            lat_grid=self.lat_grid,
+            center_lon=self.center_lon,
+            center_lat=self.center_lat,
+            acq_time_z=self.acq_time_z,
+            acq_time_local=self.acq_time_local,
+            central_lon_local_timezone=self.central_lon_local_timezone,
+        )
+
         t1 = time.perf_counter()
 
         print(
-            f"DateCube instantiated from class {self.__class__.__name__} in {t1-t0:.2f}s"
+            f"ReveCube initiated from class {self.__class__.__name__} in {t1-t0:.2f}s"
         )
 
     def cal_view_geom(self):

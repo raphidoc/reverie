@@ -1,30 +1,15 @@
-# TODO: get the standard_name of all the quantity that we could write from optical imagery ?
-#  https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
+"""
+Define application-specific aliases for CF standard names (sometimes very long).
+Some of these are not in the CF standard name table, and should be added according to the guideline at:
+https://cfconventions.org/Data/cf-standard-names/current/build/cf-standard-name-table.html
 
-# standard name
-
-# Radiometric quantities:
-# There is no good standard name for water leaving reflectance
-
-# Rrs = surface_ratio_of_upwelling_radiance_emerging_from_sea_water_to_downwelling_radiative_flux_in_air [sr-1]
-# F0 = solar_irradiance_per_unit_wavelength [W m-2 m-1]
-# Radiance at sensor = upwelling_radiance_per_unit_wavelength_in_air [W m-2 m-1 sr-1]
-# Wavelength = sensor_band_central_radiation_wavelength [m]
-
-# Domain axis
-# altitude: Altitude is the (geometric) height above the geoid, which is the reference geopotential surface. The geoid is similar to mean sea level. [m]
-# latitude: Latitude is positive northward; its units of degree_north (or equivalent) indicate this explicitly. [degree_north]
-# longitude: Longitude is positive eastward; its units of degree_east (or equivalent) indicate this explicitly [degree_east]
-# time [s]
-# projection_x_coordinate [m]
-# projection_y_coordinate [m]
-
-
-import requests
-import xmltodict
-from xml.dom.minidom import parse, parseString, Node
-import untangle
-import xml.etree.cElementTree as ET
+The xml table could be parsed for automatic retrieval of standard names, but this is not implemented yet.
+"""
+# import requests
+# import untangle
+# import xmltodict
+# from defusedxml.dom.minidom import parse, parseString, Node
+# import defusedxml.ElementTree as ET
 
 
 def get_cf_std_name(url=None, alias: str = "Lt"):
@@ -100,7 +85,6 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
 
     # TODO: automate retrieval of standard from the XML table at:
     #  http://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml
-
     # response = requests.get(url)
     # tree = ET.ElementTree(ET.fromstring(response.content))
     # # test = tree.findall('entry')

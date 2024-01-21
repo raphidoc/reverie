@@ -80,9 +80,18 @@ def fwhm_2_rsr(fwhm, centers, resolution, wrange=(200, 2000), model="gaussian"):
 
 def parse_mapinfo(mapinfo):
     """
-    compose affine from map info in ENVI Header
-    :param hdr:  map info, a list like [UTM, 1, 1, 552591.000, 5450146.500, 1.500, 1.500, 19, North,  WGS84]
-    :return:  Affine  (from rasterio.transform import Affine)
+    compose affine, crs and proj4 string from map info in ENVI Header
+
+    Parameters
+    ----------
+    mapinfo: str
+      Structure: [UTM, 1, 1, 552591.000, 5450146.500, 1.500, 1.500, 19, North,  WGS84]
+
+    Returns
+    -------
+    affine: rasterio.transform.Affine
+    crs: pyproj.crs.CRS
+    proj4string: str
     """
 
     (

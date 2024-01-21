@@ -67,7 +67,6 @@ class Tile:
         :param other:
         :return:
         """
-        pass
 
     def expand(self, size):
         self.eline += size
