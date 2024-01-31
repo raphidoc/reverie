@@ -46,8 +46,7 @@ def run_6s_gas_lut(**kwargs):
         f.writelines(input_str)
 
     # Run the 6S executable with the input parameters
-    exec_6sv1 = "/home/raphael/PycharmProjects/6SV-1.1/6SV1.1/sixsV1.1"
-    exec_6sv2 = "/home/raphael/PycharmProjects/6sV2.1/sixsV2.1"
+    exec_6sv2 = "/home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"
     process = subprocess.run(exec_6sv2, input=input_str, text=True, capture_output=True)
 
     process.stderr
@@ -63,12 +62,12 @@ if __name__ == "__main__":
         # Geometrical conditions (igeom: 0, 1, 2, 3, 4, 5, 6, 7)
         "user_geometry": int,
         # If user_geometry is selected, then enter:
-        "sol_zen": float,
-        "sol_azi": float,
-        "view_zen": float,
-        "view_azi": float,
-        "month": int,
-        "day": int,
+        "sol_zen": 0.0,
+        "sol_azi": 0.0,
+        "view_zen": 0.0,
+        "view_azi": 0.0,
+        "month": 1,
+        "day": 1,
         # Atmospheric conditions, gas (idatm: 0, 1, 2, 3, 4, 5, 6) REDUCE PARAMS
         "no_gas": int,
         "tropical": 1,
