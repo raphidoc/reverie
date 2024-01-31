@@ -31,5 +31,8 @@ def get(dt: datetime.datetime, lon, lat, local_dir=None):
     # anc_name = ['uoz', 'uwv', 'z_wind', 'm_wind', 'pressure']
     # anc_keys = ['TO3', 'TQV', 'U10M', 'V10M', 'PS']
     # anc_fact = [1. / 1000., 1. / 10., 1., 1., 1. / 100.]
+    # compute wind speed
+    # if ('z_wind' in anc) & ('m_wind' in anc):
+    #     anc['wind'] = (((anc['z_wind'])**2) + ((anc['m_wind'])**2))**0.5
 
     return anc_gmao

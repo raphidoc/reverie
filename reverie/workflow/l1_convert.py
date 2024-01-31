@@ -1,5 +1,5 @@
 import os
-import reverie.sensor.wise as wise
+import reverie.converter.wise as wise
 from tqdm import tqdm
 import numpy as np
 
@@ -11,7 +11,7 @@ def l1_convert(bundle_path: str = None, sensor: str = None):
         image_dir="/D/Data/TEST/TEST_WISE/MC-50/",
         image_name="190818_MC-50A-WI-2x1x1_v02",
     )
-    l1.create_dataset_nc(out_file=os.path.join(l1.image_dir, l1.image_name) + "-L1C.nc")
+    l1.create_reve_nc(out_file=os.path.join(l1.image_dir, l1.image_name) + "-L1C.nc")
 
     # Create radiometric variable
     l1.create_var_nc(
@@ -32,7 +32,7 @@ def l1_convert(bundle_path: str = None, sensor: str = None):
         # Assign missing value
         data[data == 0] = l1.no_data * l1.scale_factor
 
-        l1.net_ds.variables["Lt"][band, :, :] = data
+        l1.nc_ds.variables["Lt"][band, :, :] = data
 
     # Create geometric variables
     geom = {
@@ -55,7 +55,7 @@ def l1_convert(bundle_path: str = None, sensor: str = None):
 
         geom[var][np.isnan(geom[var])] = l1.no_data * l1.scale_factor
 
-        l1.net_ds.variables[var][:, :] = geom[var]
+        l1.nc_ds.variables[var][:, :] = geom[var]
 
-    l1.net_ds.close()
+    l1.nc_ds.close()
     return

@@ -170,7 +170,7 @@ class Pix(ReveCube):
 
         # TODO: Need to learn more about super(), inheritance and composition.
         super().__init__(
-            net_ds=self.net_ds,
+            nc_ds=self.nc_ds,
             wavelength=self.wavelength,
             z=self.z,
             affine=self.Affine,
@@ -275,3 +275,60 @@ class Pix(ReveCube):
         self.viewing_zenith[~self.get_valid_mask()] = np.nan
         self.view_azimuth[~self.get_valid_mask()] = np.nan
         self.sample_index[~self.get_valid_mask()] = np.nan
+
+    def to_reve_nc(self):
+        """
+        Convert the Pix() object to reve NetCDF CF format
+        :return:
+        """
+        # Create NetCDF file
+        self.create_reve_nc(
+            out_file=f"{os.path.join(self.image_dir, self.image_name)}-L1C.nc"
+        )
+
+        # Create radiometric variable
+        self.create_var_nc(
+            var="Lt",
+            dimensions=(
+                "W",
+                "Y",
+                "X",
+            ),
+        )
+
+        for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
+            # GDAL use 1 base index
+            data = self.src_ds.GetRasterBand(band + 1)
+            data = data.ReadAsArray()
+            data = data * self.scale_factor
+
+            # Assign missing value
+            data[data == 0] = self.no_data * self.scale_factor
+
+            self.nc_ds.variables["Lt"][band, :, :] = data
+
+        # Create geometric variables
+        geom = {
+            "SolAzm": self.solar_azimuth,
+            "SolZen": self.solar_zenith,
+            "ViewAzm": self.view_azimuth,
+            "ViewZen": self.viewing_zenith,
+            "RelativeAzimuth": self.relative_azimuth,
+            "SampleIndex": self.sample_index,
+        }
+
+        for var in tqdm(geom, desc="Writing geometry"):
+            self.create_var_nc(
+                var=var,
+                dimensions=(
+                    "Y",
+                    "X",
+                ),
+            )
+
+            geom[var][np.isnan(geom[var])] = self.no_data * self.scale_factor
+
+            self.nc_ds.variables[var][:, :] = geom[var]
+
+        self.nc_ds.close()
+        return

@@ -2,6 +2,7 @@
 import os
 from abc import ABC
 import datetime
+import re
 
 # Third party imports
 import netCDF4
@@ -17,7 +18,7 @@ from reverie.utils.cf_aliases import get_cf_std_name
 class ReveCube(ABC):
     """
     ReveCube abstract class is used as the base template for spectral imagery data structure in REVERIE.
-    This class is to be expanded by sensor specific class as in ../sensor/wise/read_pix.py
+    This class is to be expanded by converter specific class as in ../converter/wise/read_pix.py
 
         Attributes
     ----------
@@ -41,7 +42,7 @@ class ReveCube(ABC):
     viewing_zenith: spatially resolved viewing zenith [?]
     view_azimuth: spatially resolved viewing azimuth [?]
     relative_azimuth:spatially resolved relative azimuth (solar_azimuth - view_azimuth) [?]
-    sample_index: position of pixel on the detector array spatial dimension (pushbroom sensor only)
+    sample_index: position of pixel on the detector array spatial dimension (pushbroom converter only)
 
         Methods
     -------
@@ -49,8 +50,8 @@ class ReveCube(ABC):
     """
 
     @classmethod
-    def from_nc(cls, nc_file):
-        """Populate ReveCube object from NetCDF dataset
+    def from_reve_nc(cls, nc_file):
+        """Populate ReveCube object from reve CF NetCDF dataset
 
         Parameters
         ----------
@@ -62,7 +63,7 @@ class ReveCube(ABC):
         """
 
         if os.path.isfile(nc_file):
-            net_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
+            src_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
         else:
             raise Exception(f"File {nc_file} does not exist")
 
@@ -70,23 +71,23 @@ class ReveCube(ABC):
         #  write all attribute that should be read from the NetCDF file
 
         # Radiometric attributes
-        wavelength_var = net_ds.variables["W"]
+        wavelength_var = src_ds.variables["W"]
         wavelength = wavelength_var[:].data
 
         # Geographic attributes
-        altitude_var = net_ds.variables["Z"]
+        altitude_var = src_ds.variables["Z"]
         z = altitude_var[:][0]  # As we have only one altitude, could be a scalar
 
-        grid_mapping = net_ds.variables["grid_mapping"]
-        crs = pyproj.CRS.from_wkt(grid_mapping.crs_wtk)
+        grid_mapping = src_ds.variables["grid_mapping"]
+        crs = pyproj.CRS.from_wkt(grid_mapping.crs_wkt)
         affine = None
-        n_rows = net_ds.dimensions["Y"].size
-        n_cols = net_ds.dimensions["X"].size
+        n_rows = src_ds.dimensions["Y"].size
+        n_cols = src_ds.dimensions["X"].size
 
-        x_var = net_ds.variables["X"]
-        y_var = net_ds.variables["Y"]
-        lon_var = net_ds.variables["lon"]
-        lat_var = net_ds.variables["lat"]
+        x_var = src_ds.variables["X"]
+        y_var = src_ds.variables["Y"]
+        lon_var = src_ds.variables["lon"]
+        lat_var = src_ds.variables["lat"]
         x = x_var[:].data
         y = y_var[:].data
         lon = lon_var[:].data
@@ -98,14 +99,14 @@ class ReveCube(ABC):
         )
 
         # Time attributes
-        time_var = net_ds.variables["T"]
+        time_var = src_ds.variables["T"]
 
         acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
         acq_time_local = None, None
         central_lon_local_timezone = None
 
         return cls(
-            net_ds,
+            src_ds,
             wavelength,
             z,
             affine,
@@ -127,7 +128,7 @@ class ReveCube(ABC):
 
     def __init__(
         self,
-        net_ds: netCDF4.Dataset,
+        src_ds: netCDF4.Dataset,
         wavelength: np.ndarray,
         z: float,
         affine,
@@ -147,14 +148,15 @@ class ReveCube(ABC):
         central_lon_local_timezone: float,
     ):
         # Dataset attribute
-        self.src_ds = None
-        self.net_ds = net_ds
+        self.src_ds = src_ds
+        self.nc_ds = None
         self.sensor = None
         self.no_data = None
         self._valid_mask = None
         # TODO: scale factor should be handled variable specific
         #  it might not be appropriate to apply the same to radiometric and geometric data for example
-        self.scale_factor = None
+        #  Also not sure if it's good to give it a default value here
+        self.scale_factor = 1
         self.proj_var = None
 
         # Radiometric attributes
@@ -187,7 +189,7 @@ class ReveCube(ABC):
 
     def __str__(self):
         return f"""
-        Image from sensor {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}
+        Image from converter {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}
         Central longitude: {self.center_lon:.3f}E
         Central latitude: {self.center_lat:.3f}N
         shape: x:{self.x.shape}, y:{self.y.shape}
@@ -350,7 +352,7 @@ class ReveCube(ABC):
     def cal_view_geom(self):
         pass
 
-    def create_dataset_nc(self, out_file: str = None):
+    def create_reve_nc(self, out_file: str = None):
         """Create CF-1.0 compliant NetCDF dataset from DateCube
         CF-1.0 (http://cfconventions.org/Data/cf-conventions/cf-conventions-1.0/build/cf-conventions.html#dimensions)
          is chosen to ensure compatibility with the GDAL NetCDF driver:
@@ -366,48 +368,48 @@ class ReveCube(ABC):
             raise Exception("out_file file not set, cannot create dataset")
 
         try:
-            net_ds = netCDF4.Dataset(out_file, "w", format="NETCDF4")
+            nc_ds = netCDF4.Dataset(out_file, "w", format="NETCDF4")
         except Exception as e:
             print(e)
             return
 
         # TODO validate that it follow the convention with cfdm / cf-python.
         #  For compatibility with GDAL NetCDF driver use CF-1.0
-        net_ds.Conventions = "CF-1.0"
-        net_ds.title = "Remote sensing image written by REVERIE"
-        net_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
+        nc_ds.Conventions = "CF-1.0"
+        nc_ds.title = "Remote sensing image written by REVERIE"
+        nc_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
             "%Y-%m-%d %H:%M:%SZ"
         )
-        net_ds.institution = "AquaTel UQAR"
-        net_ds.source = "Remote sensing imagery"
-        net_ds.version = "0.1.0"
-        net_ds.references = "https://github.com/raphidoc/reverie"
-        net_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
+        nc_ds.institution = "AquaTel UQAR"
+        nc_ds.source = "Remote sensing imagery"
+        nc_ds.version = "0.1.0"
+        nc_ds.references = "https://github.com/raphidoc/reverie"
+        nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
 
         # Create Dimensions
-        net_ds.createDimension("W", len(self.wavelength))
-        net_ds.createDimension("T", len([self.acq_time_z]))
-        net_ds.createDimension("Z", len([self.z]))
-        net_ds.createDimension("Y", len(self.y))
-        net_ds.createDimension("X", len(self.x))
+        nc_ds.createDimension("W", len(self.wavelength))
+        nc_ds.createDimension("T", len([self.acq_time_z]))
+        nc_ds.createDimension("Z", len([self.z]))
+        nc_ds.createDimension("Y", len(self.y))
+        nc_ds.createDimension("X", len(self.x))
 
-        band_var = net_ds.createVariable("W", "f4", ("W",))
+        band_var = nc_ds.createVariable("W", "f4", ("W",))
         band_var.units = "nm"
         band_var.standard_name = "radiation_wavelength"
-        band_var.long_name = "Central wavelengths of the sensor bands"
+        band_var.long_name = "Central wavelengths of the converter bands"
         band_var.axis = "Wavelength"
         band_var[:] = self.wavelength
 
         # Create coordinate variables
         # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
-        t_var = net_ds.createVariable("T", "f4", ("T",))
+        t_var = nc_ds.createVariable("T", "f4", ("T",))
         t_var.standard_name = "time"
         t_var.long_name = "UTC acquisition time of remote sensing image"
         t_var.units = "seconds since 1970-01-01 00:00:00"
         t_var.calendar = "gregorian"
         t_var[:] = self.acq_time_z.timestamp()
 
-        z_var = net_ds.createVariable("Z", "f4", ("Z",))
+        z_var = nc_ds.createVariable("Z", "f4", ("Z",))
         z_var.units = "m"
         z_var.standard_name = "altitude"
         z_var.long_name = (
@@ -416,27 +418,27 @@ class ReveCube(ABC):
         z_var.axis = "y"
         z_var[:] = self.z
 
-        y_var = net_ds.createVariable("Y", "f4", ("Y",))
+        y_var = nc_ds.createVariable("Y", "f4", ("Y",))
         y_var.units = "m"
         y_var.standard_name = "projection_y_coordinate"
         y_var.long_name = "y-coordinate in projected coordinate system"
         y_var.axis = "y"
         y_var[:] = self.y
 
-        lat_var = net_ds.createVariable("lat", "f4", ("Y",))
+        lat_var = nc_ds.createVariable("lat", "f4", ("Y",))
         lat_var.standard_name = "latitude"
         lat_var.units = "degrees_north"
         # lat_var.long_name = 'latitude'
         lat_var[:] = self.lat
 
-        x_var = net_ds.createVariable("X", "f4", ("X",))
+        x_var = nc_ds.createVariable("X", "f4", ("X",))
         x_var.units = "m"
         x_var.standard_name = "projection_x_coordinate"
         x_var.long_name = "x-coordinate in projected coordinate system"
         x_var.axis = "x"
         x_var[:] = self.x
 
-        lon_var = net_ds.createVariable("lon", "f4", ("X",))
+        lon_var = nc_ds.createVariable("lon", "f4", ("X",))
         lon_var.standard_name = "longitude"
         lon_var.units = "degrees_east"
         # lon_var.long_name = 'longitude'
@@ -447,39 +449,47 @@ class ReveCube(ABC):
         print("Detected EPSG:" + str(crs.to_epsg()))
         cf_grid_mapping = crs.to_cf()
 
-        proj_var = net_ds.createVariable("grid_mapping", np.int32, ())
+        grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())
 
-        proj_var.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        proj_var.crs_wtk = cf_grid_mapping["crs_wkt"]
-        proj_var.semi_major_axis = cf_grid_mapping["semi_major_axis"]
-        proj_var.semi_minor_axis = cf_grid_mapping["semi_minor_axis"]
-        proj_var.inverse_flattening = cf_grid_mapping["inverse_flattening"]
-        proj_var.reference_ellipsoid_name = cf_grid_mapping["reference_ellipsoid_name"]
-        proj_var.longitude_of_prime_meridian = cf_grid_mapping[
+        grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
+        grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
+        grid_mapping.semi_major_axis = cf_grid_mapping["semi_major_axis"]
+        grid_mapping.semi_minor_axis = cf_grid_mapping["semi_minor_axis"]
+        grid_mapping.inverse_flattening = cf_grid_mapping["inverse_flattening"]
+        grid_mapping.reference_ellipsoid_name = cf_grid_mapping[
+            "reference_ellipsoid_name"
+        ]
+        grid_mapping.longitude_of_prime_meridian = cf_grid_mapping[
             "longitude_of_prime_meridian"
         ]
-        proj_var.prime_meridian_name = cf_grid_mapping["prime_meridian_name"]
-        proj_var.geographic_crs_name = cf_grid_mapping["geographic_crs_name"]
-        proj_var.horizontal_datum_name = cf_grid_mapping["horizontal_datum_name"]
-        proj_var.projected_crs_name = cf_grid_mapping["projected_crs_name"]
-        proj_var.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        proj_var.latitude_of_projection_origin = cf_grid_mapping[
+        grid_mapping.prime_meridian_name = cf_grid_mapping["prime_meridian_name"]
+        grid_mapping.geographic_crs_name = cf_grid_mapping["geographic_crs_name"]
+        grid_mapping.horizontal_datum_name = cf_grid_mapping["horizontal_datum_name"]
+        grid_mapping.projected_crs_name = cf_grid_mapping["projected_crs_name"]
+        grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
+        grid_mapping.latitude_of_projection_origin = cf_grid_mapping[
             "latitude_of_projection_origin"
         ]
-        proj_var.longitude_of_central_meridian = cf_grid_mapping[
+        grid_mapping.longitude_of_central_meridian = cf_grid_mapping[
             "longitude_of_central_meridian"
         ]
-        proj_var.false_easting = cf_grid_mapping["false_easting"]
-        proj_var.false_northing = cf_grid_mapping["false_northing"]
-        proj_var.scale_factor_at_central_meridian = cf_grid_mapping[
+        grid_mapping.false_easting = cf_grid_mapping["false_easting"]
+        grid_mapping.false_northing = cf_grid_mapping["false_northing"]
+        grid_mapping.scale_factor_at_central_meridian = cf_grid_mapping[
             "scale_factor_at_central_meridian"
         ]
 
-        self.proj_var = proj_var
-        self.net_ds = net_ds
+        self.proj_var = grid_mapping
+        self.nc_ds = nc_ds
 
     def create_var_nc(
-        self, var: str = None, dimensions: tuple = None, compression="zlib", complevel=1
+        self,
+        var: str = None,
+        datatype="i4",
+        dimensions: tuple = None,
+        scale_factor: float = None,
+        compression="zlib",
+        complevel=1,
     ):
         """Create a CF-1.0 variable in a NetCDF dataset
 
@@ -489,6 +499,8 @@ class ReveCube(ABC):
             Name of the variable to write to the NetCDF dataset
         dimensions : tuple
             Contain the dimension of the var with the form ('W', 'Y', 'X',).
+        scale_factor : float
+            scale_factor is used by NetCDF CF in writing and reading for lossy compression.
         compression : str, default: 'zlib'
             Name of the compression algorithm to use. Use None to deactivate compression.
         complevel : int, default: 1
@@ -502,13 +514,13 @@ class ReveCube(ABC):
         create_dataset_nc
         """
 
-        ds = self.net_ds
+        ds = self.nc_ds
 
         data_var = ds.createVariable(
             varname=var,
-            datatype="i4",
+            datatype=datatype,
             dimensions=dimensions,
-            fill_value=self.no_data,
+            # fill_value=self.no_data,
             compression=compression,
             complevel=complevel,
         )
@@ -527,7 +539,8 @@ class ReveCube(ABC):
 
         # self.__dst.variables['Rrs'].valid_min = 0
         # self.__dst.variables['Rrs'].valid_max = 6000
-        data_var.missing_value = self.no_data
+        # Easier to leave missing_value as the default _FillValue
+        # data_var.missing_value = self.no_data
 
         """
         scale_factor is used by NetCDF CF in writing and reading
@@ -536,12 +549,12 @@ class ReveCube(ABC):
         If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
         reciprocal of it.
         """
-        data_var.scale_factor = self.scale_factor
+        data_var.scale_factor = scale_factor
         data_var.add_offset = 0
 
-    def to_nc(self):
-        """
-        TODO : Wrapper for create_dataset_nc, create_var_nc, write_var_nc, close_nc ?
-        Returns
-        -------
-        """
+    # def to_nc(self):
+    #     """
+    #     TODO : Wrapper for create_dataset_nc, create_var_nc, write_var_nc, close_nc ?
+    #     Returns
+    #     -------
+    #     """
