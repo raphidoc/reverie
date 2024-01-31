@@ -59,15 +59,11 @@ The water vapor LUT is generated using the following parameters:
 """
 
 import os
-import time
 import subprocess
 
 import netCDF4
-import xarray as xr
 import numpy as np
 from p_tqdm import p_uimap
-
-from tidy_6s_output import tidy_6s_output
 
 
 def create_gas_output_nc(filename, coords, compression=None, complevel=None):

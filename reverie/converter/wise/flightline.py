@@ -34,9 +34,8 @@ class FlightLine:
 
             ncols = int(header["samples"])
             nrows = int(header["lines"])
-            resolution_x, resolution_y = float(header["pixel size"][0]), float(
-                header["pixel size"][1]
-            )
+            x, y = header["pixel size"].split(",")
+            resolution_x, resolution_y = float(x), float(y)
 
             with open(nav_sum_log, "r") as f:
                 lines = f.readlines()

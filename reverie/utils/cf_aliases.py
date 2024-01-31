@@ -87,11 +87,11 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     #  http://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml
     # response = requests.get(url)
     # tree = ET.ElementTree(ET.fromstring(response.content))
-    # # test = tree.findall('entry')
+    # # tests = tree.findall('entry')
     # qry=f"entry[@id='{std_name}']"
-    # test = tree.find(qry)
+    # tests = tree.find(qry)
     # dic = {}
-    # for x in test.iter():
+    # for x in tests.iter():
     #     print(x.text)
 
     return std_name, std_unit

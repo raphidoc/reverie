@@ -8,6 +8,12 @@ import re
 import netCDF4
 import numpy as np
 import pyproj
+import pandas as pd
+import geopandas as gpd
+from tqdm import tqdm
+from p_tqdm import p_uimap
+import shapely
+import xarray as xr
 
 # REVERIE import
 from reverie.utils import helper
@@ -50,22 +56,22 @@ class ReveCube(ABC):
     """
 
     @classmethod
-    def from_reve_nc(cls, nc_file):
+    def from_reve_nc(cls, src_file):
         """Populate ReveCube object from reve CF NetCDF dataset
 
         Parameters
         ----------
-        nc_file: str
+        src_file: str
             NetcCDF (.nc) CF-1.0 compliant file to read from
 
         Returns
         -------
         """
 
-        if os.path.isfile(nc_file):
-            src_ds = netCDF4.Dataset(nc_file, "r", format="NETCDF4")
+        if os.path.isfile(src_file):
+            src_ds = netCDF4.Dataset(src_file, "r", format="NETCDF4")
         else:
-            raise Exception(f"File {nc_file} does not exist")
+            raise Exception(f"File {src_file} does not exist")
 
         # TODO: better define the attributes to be read from the NetCDF file
         #  write all attribute that should be read from the NetCDF file
@@ -106,6 +112,7 @@ class ReveCube(ABC):
         central_lon_local_timezone = None
 
         return cls(
+            src_file,
             src_ds,
             wavelength,
             z,
@@ -128,6 +135,7 @@ class ReveCube(ABC):
 
     def __init__(
         self,
+        src_file: str,
         src_ds: netCDF4.Dataset,
         wavelength: np.ndarray,
         z: float,
@@ -148,6 +156,7 @@ class ReveCube(ABC):
         central_lon_local_timezone: float,
     ):
         # Dataset attribute
+        self.src_file = src_file
         self.src_ds = src_ds
         self.nc_ds = None
         self.sensor = None
@@ -156,7 +165,7 @@ class ReveCube(ABC):
         # TODO: scale factor should be handled variable specific
         #  it might not be appropriate to apply the same to radiometric and geometric data for example
         #  Also not sure if it's good to give it a default value here
-        self.scale_factor = 1
+        # self.scale_factor = 1
         self.proj_var = None
 
         # Radiometric attributes
@@ -185,7 +194,7 @@ class ReveCube(ABC):
         self.sample_index = None
 
         # Component attribute
-        self.PixelExtractor = None
+        self.pixel_extractor = None
 
     def __str__(self):
         return f"""
@@ -274,7 +283,8 @@ class ReveCube(ABC):
             f"acquired UTC time:{self.acq_time_z}, and local time：{self.acq_time_local}"
         )
 
-        offset_hours = self.acq_time_local.offset_hours
+        offset_hours = self.acq_time_local.utcoffset().total_seconds() / 3600
+
         self.central_lon_local_timezone = offset_hours * 15
         print(f"central longitude of {tz}:{self.central_lon_local_timezone}")
 
@@ -485,9 +495,9 @@ class ReveCube(ABC):
     def create_var_nc(
         self,
         var: str = None,
-        datatype="i4",
+        datatype=None,
         dimensions: tuple = None,
-        scale_factor: float = None,
+        scale_factor: float = 1.0,
         compression="zlib",
         complevel=1,
     ):
@@ -539,8 +549,10 @@ class ReveCube(ABC):
 
         # self.__dst.variables['Rrs'].valid_min = 0
         # self.__dst.variables['Rrs'].valid_max = 6000
-        # Easier to leave missing_value as the default _FillValue
-        # data_var.missing_value = self.no_data
+        # Easier to leave missing_value as the default _FillValue,
+        # but then GDAL doesn't recognize it ...
+        self.no_data = netCDF4.default_fillvals[datatype]
+        data_var.missing_value = self.no_data
 
         """
         scale_factor is used by NetCDF CF in writing and reading
@@ -552,9 +564,76 @@ class ReveCube(ABC):
         data_var.scale_factor = scale_factor
         data_var.add_offset = 0
 
-    # def to_nc(self):
-    #     """
-    #     TODO : Wrapper for create_dataset_nc, create_var_nc, write_var_nc, close_nc ?
-    #     Returns
-    #     -------
-    #     """
+    def to_reve_nc(self):
+        """
+        TODO : Wrapper for create_dataset_nc, create_var_nc, write_var_nc, close_nc ?
+        Returns
+        -------
+        """
+        pass
+
+    def extract_pixel(
+        self, matchup_file: str = None, var_name: list = None, window_size: int = 1
+    ):
+        """
+        Method to exctract the pixel matchups provided by `matchup_gdf`
+        Should provide a way to select variables to be extracted
+        Another method should list the variable that can be extracted
+        Should also add some metadata from the CF convention to the output like Acquisition time, Processing (atmcor), ...
+        """
+
+        # load the nc dataset with xarray
+
+        xr_ds = xr.open_dataset(self.src_file)
+
+        matchup_gdf = pd.read_csv(matchup_file)
+        matchup_gdf = matchup_gdf[["datetime", "lon", "lat", "UUID"]]
+
+        # When matchup data is in long format
+        matchup_gdf = matchup_gdf.drop_duplicates()
+
+        match_geometry = gpd.points_from_xy(
+            matchup_gdf["lon"], matchup_gdf["lat"], crs="EPSG:4326"
+        )
+
+        matchup_gdf = gpd.GeoDataFrame(matchup_gdf, geometry=match_geometry)
+
+        print(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
+        matchup_gdf = matchup_gdf.to_crs(self.CRS.to_epsg())
+
+        # TODO manage the variables to be extracted, either read from all available variable or user input
+        #   Take a look at the method isel_window(window: Window, pad: bool = False)
+
+        pixex_df = pd.DataFrame()
+
+        # def extractor(uuid, nc_ds=self.nc_ds, matchup_gdf=matchup_gdf):
+
+        # iterator = p_uimap(extractor, matchup_gdf["UUID"])
+
+        pixex_df = pd.DataFrame()
+        for uuid in tqdm(matchup_gdf["UUID"]):
+            temp_gdf = matchup_gdf[matchup_gdf["UUID"] == uuid].reset_index()
+            temp_pix_ex_array = xr_ds.sel(
+                X=shapely.get_x(temp_gdf.geometry)[0],
+                Y=shapely.get_y(temp_gdf.geometry)[0],
+                # isodate=pd.to_datetime(temp_gdf['DateTime'][0]),
+                method="nearest",
+            )
+
+            # For some reason the Sensor variable create an error with to_dataframe().
+            # Seems to be linked to the data type (string, <U7 or object)
+            # temp_pixex_df = temp_pix_ex_array.to_array(name='Values')
+            # temp_pixex_df = temp_pix_ex_array.to_dataframe(name='Values')
+            temp_pixex_df = temp_pix_ex_array.to_dataframe()
+            # temp_pixex_df = temp_pixex_df.rename_axis("Wavelength")
+            # temp_pixex_df = temp_pixex_df.reset_index()
+            # TODO output a wide format when wavelength and non wavelength data are mixed
+            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='Lt')
+            temp_pixex_df["UUID"] = uuid
+            # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
+            # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)
+            # temp_pixex_df['AtCor'] = 'ac4icw'
+
+            pixex_df = pd.concat([pixex_df, temp_pixex_df], axis=0)
+
+        return pixex_df

@@ -8,6 +8,7 @@ from osgeo import gdal
 from tqdm import tqdm
 import numpy as np
 import re
+import netCDF4
 
 # REVERIE import
 from reverie.image import ReveCube
@@ -170,7 +171,7 @@ class Pix(ReveCube):
 
         # TODO: Need to learn more about super(), inheritance and composition.
         super().__init__(
-            nc_ds=self.nc_ds,
+            src_ds=self.src_ds,
             wavelength=self.wavelength,
             z=self.z,
             affine=self.Affine,
@@ -289,11 +290,13 @@ class Pix(ReveCube):
         # Create radiometric variable
         self.create_var_nc(
             var="Lt",
+            datatype="i4",
             dimensions=(
                 "W",
                 "Y",
                 "X",
             ),
+            scale_factor=self.scale_factor,
         )
 
         for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
@@ -303,6 +306,14 @@ class Pix(ReveCube):
             data = data * self.scale_factor
 
             # Assign missing value
+            # -2147483647 is the default no data value for int32
+            """
+            scale_factor is used by NetCDF CF in writing and reading
+            Reading: multiply by the scale_factor and add the add_offset
+            Writing: subtract the add_offset and divide by the scale_factor
+            If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
+            reciprocal of it.
+            """
             data[data == 0] = self.no_data * self.scale_factor
 
             self.nc_ds.variables["Lt"][band, :, :] = data
@@ -320,13 +331,13 @@ class Pix(ReveCube):
         for var in tqdm(geom, desc="Writing geometry"):
             self.create_var_nc(
                 var=var,
+                datatype="i4",
                 dimensions=(
                     "Y",
                     "X",
                 ),
+                scale_factor=self.scale_factor,
             )
-
-            geom[var][np.isnan(geom[var])] = self.no_data * self.scale_factor
 
             self.nc_ds.variables[var][:, :] = geom[var]
 
