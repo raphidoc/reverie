@@ -14,6 +14,7 @@ from tqdm import tqdm
 from p_tqdm import p_uimap
 import shapely
 import xarray as xr
+import math
 
 # REVERIE import
 from reverie.utils import helper
@@ -73,64 +74,40 @@ class ReveCube(ABC):
         else:
             raise Exception(f"File {src_file} does not exist")
 
-        # TODO: better define the attributes to be read from the NetCDF file
-        #  write all attribute that should be read from the NetCDF file
-
-        # Radiometric attributes
+        # Spectral attributes
         wavelength_var = src_ds.variables["W"]
         wavelength = wavelength_var[:].data
 
-        # Geographic attributes
+        # Spatiotemporal attributes
+        time_var = src_ds.variables["T"]
+        acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
         altitude_var = src_ds.variables["Z"]
-        z = altitude_var[:][0]  # As we have only one altitude, could be a scalar
-
-        grid_mapping = src_ds.variables["grid_mapping"]
-        crs = pyproj.CRS.from_wkt(grid_mapping.crs_wkt)
-        affine = None
+        z = altitude_var[:][0]
+        y = src_ds.variables["Y"][:].data
+        x = src_ds.variables["X"][:].data
+        lat = src_ds.variables["lat"][:].data
+        lon = src_ds.variables["lon"][:].data
         n_rows = src_ds.dimensions["Y"].size
         n_cols = src_ds.dimensions["X"].size
 
-        x_var = src_ds.variables["X"]
-        y_var = src_ds.variables["Y"]
-        lon_var = src_ds.variables["lon"]
-        lat_var = src_ds.variables["lat"]
-        x = x_var[:].data
-        y = y_var[:].data
-        lon = lon_var[:].data
-        lat = lat_var[:].data
-        lon_grid, lat_grid = None, None
-        center_lon, center_lat = (
-            lon_var[round(len(x) / 2)].data,
-            lat_var[round(len(y) / 2)].data,
-        )
-
-        # Time attributes
-        time_var = src_ds.variables["T"]
-
-        acq_time_z = datetime.datetime.fromtimestamp(time_var[:][0])
-        acq_time_local = None, None
-        central_lon_local_timezone = None
+        grid_mapping = src_ds.variables["grid_mapping"]
+        affine = None
+        crs = pyproj.CRS.from_wkt(grid_mapping.crs_wkt)
 
         return cls(
             src_file,
             src_ds,
             wavelength,
+            acq_time_z,
             z,
-            affine,
+            y,
+            x,
+            lat,
+            lon,
             n_rows,
             n_cols,
+            affine,
             crs,
-            x,
-            y,
-            lon,
-            lat,
-            lon_grid,
-            lat_grid,
-            center_lon,
-            center_lat,
-            acq_time_z,
-            acq_time_local,
-            central_lon_local_timezone,
         )
 
     def __init__(
@@ -138,63 +115,64 @@ class ReveCube(ABC):
         src_file: str,
         src_ds: netCDF4.Dataset,
         wavelength: np.ndarray,
+        acq_time_z,
         z: float,
-        affine,
+        y: np.ndarray,
+        x: np.ndarray,
+        lat: np.ndarray,
+        lon: np.ndarray,
         n_rows: int,
         n_cols: int,
+        affine,
         crs: pyproj.crs.CRS,
-        x: np.ndarray,
-        y: np.ndarray,
-        lon: np.ndarray,
-        lat: np.ndarray,
-        lon_grid: np.ndarray,
-        lat_grid: np.ndarray,
-        center_lon: float,
-        center_lat: float,
-        acq_time_z: datetime.datetime,
-        acq_time_local: datetime.datetime,
-        central_lon_local_timezone: float,
     ):
-        # Dataset attribute
-        self.src_file = src_file
-        self.src_ds = src_ds
-        self.nc_ds = None
-        self.sensor = None
-        self.no_data = None
-        self._valid_mask = None
-        # TODO: scale factor should be handled variable specific
-        #  it might not be appropriate to apply the same to radiometric and geometric data for example
-        #  Also not sure if it's good to give it a default value here
-        # self.scale_factor = 1
-        self.proj_var = None
+        # Dataset accessor
+        self.in_file = src_file
+        self.in_ds = src_ds
 
-        # Radiometric attributes
+        # Spectral attributes
         self.wavelength = wavelength
 
-        # Geographic attributes
-        # Altitude (z) could alternatively belong the Geometric attributes ?
+        # Spatiotemporal attributes
+        self.acq_time_z = acq_time_z
         self.z = z
-        self.Affine, self.n_rows, self.n_cols, self.CRS = affine, n_rows, n_cols, crs
+        self.y = y
+        self.x = x
+        self.lon = lon
+        self.lat = lat
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.Affine = affine
+        self.CRS = crs
 
-        self.x, self.y, self.lon, self.lat = x, y, lon, lat
-        self.lon_grid, self.lat_grid = lon_grid, lat_grid
-        self.center_lon, self.center_lat = center_lon, center_lat
+        # Sensor attribute store metadata from the sensor in a dictionary
+        self.sensor = {}
+
+        # Additional attributes
+        self.out_file = None
+        self.out_ds = None
+
+        self.no_data = None
+        self._valid_mask = None
+        # self.proj_var = None
+
+        # Geographic attributes
+        self.lon_grid, self.lat_grid = None, None
+        self.center_lon, self.center_lat = None, None
 
         # Time attributes
-        self.acq_time_z, self.acq_time_local = acq_time_z, acq_time_local
-        self.central_lon_local_timezone = central_lon_local_timezone
+        self.acq_time_local = None
+        self.central_lon_local_timezone = None
 
         # Geometric attributes
         self.solar_zenith = None
         self.solar_azimuth = None
-
         self.viewing_zenith = None
         self.view_azimuth = None
         self.relative_azimuth = None
-        self.sample_index = None
 
-        # Component attribute
-        self.pixel_extractor = None
+        # Pixel location on the sensor array
+        self.sample_index = None
 
     def __str__(self):
         return f"""
@@ -341,7 +319,7 @@ class ReveCube(ABC):
         :param tile: an instance of the Tile class used for tiled processing
         :return: re
         """
-        band_temp = self.src_ds.GetRasterBand(bandindex + 1)
+        band_temp = self.in_ds.GetRasterBand(bandindex + 1)
         if tile:
             Lt = band_temp.ReadAsArray(
                 xoff=tile[2], yoff=tile[0], win_xsize=tile.xsize, win_ysize=tile.ysize
@@ -490,7 +468,7 @@ class ReveCube(ABC):
         ]
 
         self.proj_var = grid_mapping
-        self.nc_ds = nc_ds
+        self.out_ds = nc_ds
 
     def create_var_nc(
         self,
@@ -524,18 +502,24 @@ class ReveCube(ABC):
         create_dataset_nc
         """
 
-        ds = self.nc_ds
+        ds = self.out_ds
+
+        # Easier to leave missing_value as the default _FillValue,
+        # but then GDAL doesn't recognize it ...
+        # self.no_data = netCDF4.default_fillvals[datatype]
+        # When scaling the default _FillValue, it get somehow messed up when reading with GDAL
+        self.no_data = math.trunc(netCDF4.default_fillvals[datatype] * 0.00001)
 
         data_var = ds.createVariable(
             varname=var,
             datatype=datatype,
             dimensions=dimensions,
-            # fill_value=self.no_data,
+            fill_value=self.no_data,
             compression=compression,
             complevel=complevel,
         )
 
-        data_var.grid_mapping = self.proj_var.name
+        data_var.grid_mapping = "grid_mapping"  # self.proj_var.name
 
         # Follow the standard name table CF convention
         # TODO: fill the units and standard name automatically from var ?
@@ -549,9 +533,6 @@ class ReveCube(ABC):
 
         # self.__dst.variables['Rrs'].valid_min = 0
         # self.__dst.variables['Rrs'].valid_max = 6000
-        # Easier to leave missing_value as the default _FillValue,
-        # but then GDAL doesn't recognize it ...
-        self.no_data = netCDF4.default_fillvals[datatype]
         data_var.missing_value = self.no_data
 
         """
@@ -583,11 +564,11 @@ class ReveCube(ABC):
         """
 
         # load the nc dataset with xarray
-
-        xr_ds = xr.open_dataset(self.src_file)
+        xr_ds = xr.open_dataset(self.in_file)
 
         matchup_gdf = pd.read_csv(matchup_file)
-        matchup_gdf = matchup_gdf[["datetime", "lon", "lat", "UUID"]]
+        matchup_gdf.columns = matchup_gdf.columns.str.lower()
+        matchup_gdf = matchup_gdf[["datetime", "lon", "lat", "uuid"]]
 
         # When matchup data is in long format
         matchup_gdf = matchup_gdf.drop_duplicates()
@@ -606,13 +587,14 @@ class ReveCube(ABC):
 
         pixex_df = pd.DataFrame()
 
-        # def extractor(uuid, nc_ds=self.nc_ds, matchup_gdf=matchup_gdf):
+        # def extractor(uuid, out_ds=self.out_ds, matchup_gdf=matchup_gdf):
 
         # iterator = p_uimap(extractor, matchup_gdf["UUID"])
 
         pixex_df = pd.DataFrame()
-        for uuid in tqdm(matchup_gdf["UUID"]):
-            temp_gdf = matchup_gdf[matchup_gdf["UUID"] == uuid].reset_index()
+        for uuid in tqdm(matchup_gdf["uuid"]):
+            temp_gdf = matchup_gdf[matchup_gdf["uuid"] == uuid].reset_index()
+
             temp_pix_ex_array = xr_ds.sel(
                 X=shapely.get_x(temp_gdf.geometry)[0],
                 Y=shapely.get_y(temp_gdf.geometry)[0],
@@ -629,7 +611,7 @@ class ReveCube(ABC):
             # temp_pixex_df = temp_pixex_df.reset_index()
             # TODO output a wide format when wavelength and non wavelength data are mixed
             # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='Lt')
-            temp_pixex_df["UUID"] = uuid
+            temp_pixex_df["uuid"] = uuid
             # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
             # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)
             # temp_pixex_df['AtCor'] = 'ac4icw'

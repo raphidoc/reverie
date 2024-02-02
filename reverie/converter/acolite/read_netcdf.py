@@ -66,35 +66,26 @@ class AcoliteNetCDF(ReveCube):
         # don't know why this was done
         lon = lon_var[:, 0].data
         lat = lat_var[0, :].data
-        lon_grid, lat_grid = None, None
-        center_lon, center_lat = None, None
 
         # Time attributes
         time_var = src_ds.isodate
 
         acq_time_z = datetime.fromisoformat(time_var)
-        acq_time_local = None, None
-        central_lon_local_timezone = None
 
         super().__init__(
+            nc_file,
             src_ds,
             wavelength,
+            acq_time_z,
             z,
-            affine,
-            n_rows,
-            n_cols,
-            crs,
-            x,
             y,
+            x,
             lon,
             lat,
-            lon_grid,
-            lat_grid,
-            center_lon,
-            center_lat,
-            acq_time_z,
-            acq_time_local,
-            central_lon_local_timezone,
+            n_rows,
+            n_cols,
+            affine,
+            crs,
         )
 
     def to_reve_nc(self, out_file=None):
@@ -102,7 +93,7 @@ class AcoliteNetCDF(ReveCube):
         Convert ACOLITE NetCDF to REVE NetCDF
         """
         if out_file is None:
-            out_file = f"{os.path.splitext(self.src_ds.filepath())[0]}-reve.nc"
+            out_file = f"{os.path.splitext(self.in_ds.filepath())[0]}-reve.nc"
 
         # Create REVE NetCDF
         self.create_reve_nc(out_file)
@@ -123,12 +114,12 @@ class AcoliteNetCDF(ReveCube):
         for var_name, wavelength in tqdm(
             self.spectral_var.items(), desc="Writing band: "
         ):
-            data = self.src_ds.variables[var_name][:, :].data
+            data = self.in_ds.variables[var_name][:, :].data
             # Cannot directly index with wavelength value as to find the index of the wavelength
             # we need to round the value as the conversion to list appear to modify it
-            wave_ix = np.where(self.nc_ds.variables["W"][:].data == wavelength)[0][0]
+            wave_ix = np.where(self.out_ds.variables["W"][:].data == wavelength)[0][0]
             # Could also just assume the order is correct and use the index of the variable
-            self.nc_ds.variables["rhow"][wave_ix, :, :] = data
+            self.out_ds.variables["rhow"][wave_ix, :, :] = data
 
         # # Create geometric variables
         # geom = {
@@ -151,7 +142,7 @@ class AcoliteNetCDF(ReveCube):
         #
         #     geom[var][np.isnan(geom[var])] = self.no_data * self.scale_factor
         #
-        #     self.nc_ds.variables[var][:, :] = geom[var]
+        #     self.out_ds.variables[var][:, :] = geom[var]
 
-        self.nc_ds.close()
+        self.out_ds.close()
         return

@@ -48,8 +48,8 @@ class Pix(ReveCube):
             raise ValueError("image_dir does not exist")
 
         # WISE radiometric data
-        self.hdr_f = os.path.join(image_dir, image_name + "-L1G.pix.hdr")
-        self.pix_f = os.path.join(image_dir, image_name + "-L1G.pix")
+        self.hdr_f = os.path.join(image_dir, image_name + "-L1CG.pix.hdr")
+        self.pix_f = os.path.join(image_dir, image_name + "-L1CG.pix")
 
         if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
             print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
@@ -64,9 +64,9 @@ class Pix(ReveCube):
         print(f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}")
 
         # Define image cube size
-        # self.src_ds.RasterYSize
+        # self.in_ds.RasterYSize
         # Vertical axis: lines = rows = height = y
-        # self.src_ds.RasterXSize
+        # self.in_ds.RasterXSize
         # Horizontal axis: samples = columns = width = x
         self.n_rows = int(self.header["lines"])
         self.n_cols = int(self.header["samples"])
@@ -171,24 +171,19 @@ class Pix(ReveCube):
 
         # TODO: Need to learn more about super(), inheritance and composition.
         super().__init__(
+            src_file=self.pix_f,
             src_ds=self.src_ds,
             wavelength=self.wavelength,
+            acq_time_z=self.acq_time_z,
             z=self.z,
-            affine=self.Affine,
+            y=self.y,
+            x=self.x,
+            lat=self.lat,
+            lon=self.lon,
             n_rows=self.n_rows,
             n_cols=self.n_cols,
+            affine=self.Affine,
             crs=self.CRS,
-            x=self.x,
-            y=self.y,
-            lon=self.lon,
-            lat=self.lat,
-            lon_grid=self.lon_grid,
-            lat_grid=self.lat_grid,
-            center_lon=self.center_lon,
-            center_lat=self.center_lat,
-            acq_time_z=self.acq_time_z,
-            acq_time_local=self.acq_time_local,
-            central_lon_local_timezone=self.central_lon_local_timezone,
         )
 
         t1 = time.perf_counter()
@@ -316,7 +311,7 @@ class Pix(ReveCube):
             """
             data[data == 0] = self.no_data * self.scale_factor
 
-            self.nc_ds.variables["Lt"][band, :, :] = data
+            self.out_ds.variables["Lt"][band, :, :] = data
 
         # Create geometric variables
         geom = {
@@ -339,7 +334,7 @@ class Pix(ReveCube):
                 scale_factor=self.scale_factor,
             )
 
-            self.nc_ds.variables[var][:, :] = geom[var]
+            self.out_ds.variables[var][:, :] = geom[var]
 
-        self.nc_ds.close()
+        self.out_ds.close()
         return

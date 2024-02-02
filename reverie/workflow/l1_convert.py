@@ -5,7 +5,6 @@ import numpy as np
 
 
 def l1_convert(bundle_path: str = None, sensor: str = None):
-    # TODO: l1_convert should find the appropriate parsing class from sensor.detect_bundle
 
     l1 = wise.read_pix.Pix(
         image_dir="/D/Data/TEST/TEST_WISE/MC-50/",
@@ -33,7 +32,7 @@ def l1_convert(bundle_path: str = None, sensor: str = None):
         # Assign missing value
         data[data == 0] = l1.no_data * l1.scale_factor
 
-        l1.nc_ds.variables["Lt"][band, :, :] = data
+        l1.out_ds.variables["Lt"][band, :, :] = data
 
     # Create geometric variables
     geom = {
@@ -56,7 +55,7 @@ def l1_convert(bundle_path: str = None, sensor: str = None):
 
         geom[var][np.isnan(geom[var])] = l1.no_data * l1.scale_factor
 
-        l1.nc_ds.variables[var][:, :] = geom[var]
+        l1.out_ds.variables[var][:, :] = geom[var]
 
-    l1.nc_ds.close()
+    l1.out_ds.close()
     return
