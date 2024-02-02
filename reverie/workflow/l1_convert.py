@@ -5,7 +5,6 @@ import numpy as np
 
 
 def l1_convert(bundle_path: str = None, sensor: str = None):
-
     l1 = wise.read_pix.Pix(
         image_dir="/D/Data/TEST/TEST_WISE/MC-50/",
         image_name="190818_MC-50A-WI-2x1x1_v02",

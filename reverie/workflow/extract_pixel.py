@@ -15,5 +15,5 @@ if __name__ == "__main__":
 
     test = reve_nc.extract_pixel(
         "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/Match_MP_20190818.csv",
-        var_name="Lt",
+        window_size=7,
     )

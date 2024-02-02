@@ -1,7 +1,7 @@
 # Standard library imports
 import os
 import time
-from datetime import datetime
+import datetime
 
 # Third party imports
 from osgeo import gdal
@@ -14,6 +14,7 @@ import netCDF4
 from reverie.image import ReveCube
 from .flightline import FlightLine
 from reverie.utils import helper
+from reverie.utils.tile import Tile
 
 # from reverie.utils.tile import Tile
 
@@ -56,12 +57,22 @@ class Pix(ReveCube):
 
         self.image_name = image_name
 
-        # Parse ENVI header
-        self.header = helper.read_envi_hdr(hdr_f=self.hdr_f)
-
         # Open the .pix file with GDAL
         self.src_ds = gdal.Open(self.pix_f)
         print(f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}")
+
+        # Parse ENVI header
+        self.header = helper.read_envi_hdr(hdr_f=self.hdr_f)
+
+        self.wavelength = np.array(
+            [float(w) for w in self.header["wavelength"].split(",")]
+        )
+
+        # Define time for the image
+        # datetime.strptime("21/11/06T16:30:00Z", "%d/%m/%yT%H:%M:%SZ")
+        self.acq_time_z = datetime.datetime.strptime(
+            self.header["acquisition time"], "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=datetime.timezone.utc)
 
         # Define image cube size
         # self.in_ds.RasterYSize
@@ -71,9 +82,12 @@ class Pix(ReveCube):
         self.n_rows = int(self.header["lines"])
         self.n_cols = int(self.header["samples"])
         self.n_bands = int(self.header["bands"])
-        self.wavelength = np.array(
-            [float(w) for w in self.header["wavelength"].split(",")]
-        )
+
+        # Define image coordinate from 'map info'
+        map_info = self.header["map info"]
+        self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)
+        # Compute projected and geographic coordinates
+        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
 
         # Define data type, unit, scale factor, offset, and ignore values
         dtype = int(self.header["data type"])
@@ -113,27 +127,11 @@ class Pix(ReveCube):
             print(e)
             self.scale_factor = float(scale_factor)
         print(f"Converted scale factor as: {self.scale_factor}")
-
         ignore_value = self.header["data ignore value"]
         if ignore_value == "":
             self.no_data = -99999
         else:
             self.no_data = int(ignore_value)
-
-        # Define image coordinate system from 'map info'
-        map_info = self.header["map info"]
-        self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)
-        # When in debugging mode with pdb, have to pass class and self to super(Pix, self)
-        # see https://stackoverflow.com/questions/53508770/python-3-runtimeerror-super-no-arguments
-        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
-
-        # Define time for the image
-        # datetime.strptime("21/11/06T16:30:00Z", "%d/%m/%yT%H:%M:%SZ")
-        self.acq_time_z = datetime.strptime(
-            self.header["acquisition time"], "%Y-%m-%dT%H:%M:%SZ"
-        )
-
-        self.cal_time(self.center_lon, self.center_lat)
 
         # Geocorrection Look Up tables
         self.glu_hdr_f = os.path.join(image_dir, image_name + "-L1A.glu.hdr")
@@ -160,16 +158,6 @@ class Pix(ReveCube):
             )
             self.z = self.flightline.height
 
-        # Other instance attribute that need to be instanced before population by methods
-        self._valid_mask = None
-
-        self.cal_sun_geom()
-
-        self.cal_view_geom()
-
-        self.cal_relative_azimuth()
-
-        # TODO: Need to learn more about super(), inheritance and composition.
         super().__init__(
             src_file=self.pix_f,
             src_ds=self.src_ds,
@@ -185,6 +173,19 @@ class Pix(ReveCube):
             affine=self.Affine,
             crs=self.CRS,
         )
+
+        self.cal_coordinate_grid(self.lat, self.lon)
+
+        self.cal_time(self.center_lon, self.center_lat)
+
+        # Other instance attribute that need to be instanced before population by methods
+        # self._valid_mask = None
+
+        self.cal_sun_geom()
+
+        self.cal_view_geom()
+
+        self.cal_relative_azimuth()
 
         t1 = time.perf_counter()
 
@@ -272,6 +273,47 @@ class Pix(ReveCube):
         self.view_azimuth[~self.get_valid_mask()] = np.nan
         self.sample_index[~self.get_valid_mask()] = np.nan
 
+    def read_band(self, bandindex, tile: Tile = None):
+        """
+        read DN for a given band
+        :param bandindex: bandindex starts with 0
+        :param tile: an instance of the Tile class used for tiled processing
+        :return: re
+        """
+
+        band_temp = self.src_ds.GetRasterBand(bandindex + 1)
+        if tile:
+            Lt = band_temp.ReadAsArray(
+                xoff=tile[2], yoff=tile[0], win_xsize=tile.xsize, win_ysize=tile.ysize
+            )
+        else:
+            Lt = band_temp.ReadAsArray()
+
+        return Lt
+
+    def get_valid_mask(self, tile: Tile = None):
+        """
+        Get the valid mask for the enire image or a specific tile
+        :param tile: an object of class tile.Tile()
+        :return:
+        """
+        if self._valid_mask is None:
+            self.cal_valid_mask()
+        if tile is None:
+            return self._valid_mask
+        else:
+            return self._valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+
+    def cal_valid_mask(self):
+        """
+        Calculate the mask of valid pixel for the entire image (!= nodata)
+        :return: _valid_mask
+        """
+        if self._valid_mask is None:
+            iband = 0
+            Lt = self.read_band(iband)
+            self._valid_mask = Lt > 0
+
     def to_reve_nc(self):
         """
         Convert the Pix() object to reve NetCDF CF format
@@ -301,7 +343,6 @@ class Pix(ReveCube):
             data = data * self.scale_factor
 
             # Assign missing value
-            # -2147483647 is the default no data value for int32
             """
             scale_factor is used by NetCDF CF in writing and reading
             Reading: multiply by the scale_factor and add the add_offset
@@ -333,8 +374,11 @@ class Pix(ReveCube):
                 ),
                 scale_factor=self.scale_factor,
             )
+            data = geom[var]
 
-            self.out_ds.variables[var][:, :] = geom[var]
+            np.nan_to_num(data, copy=False, nan=self.no_data * self.scale_factor)
+
+            self.out_ds.variables[var][:, :] = data
 
         self.out_ds.close()
         return
