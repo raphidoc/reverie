@@ -42,8 +42,8 @@ def run_6s_gas_lut(**kwargs):
         ]
     )
 
-    with open("/home/raphael/PycharmProjects/reverie/reverie/6S/in.txt", "w") as f:
-        f.writelines(input_str)
+    # with open("/home/raphael/PycharmProjects/reverie/reverie/6S/in.txt", "w") as f:
+    #     f.writelines(input_str)
 
     # Run the 6S executable with the input parameters
     exec_6sv2 = "/home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"

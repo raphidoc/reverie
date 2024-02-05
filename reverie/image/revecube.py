@@ -280,6 +280,7 @@ class ReveCube(ABC):
         calculate solar zenith angle and azimuth angle
         :return:
         """
+        # TODO: check Meeus, J. (1998). Astronomical Algorithms. Willmann-Bell, Inc.
         hour_angle = helper.cal_solar_hour_angle(
             self.lon_grid, self.central_lon_local_timezone, self.acq_time_local
         )
@@ -621,29 +622,8 @@ class ReveCube(ABC):
         print(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
         matchup_gdf = matchup_gdf.to_crs(self.CRS.to_epsg())
 
-        # Filter observation outside the image valid mask
-        # Get the valid mask from the image
-        valid_mask = self.get_valid_mask()
-
-        # Assume that lon_grid and lat_grid are the longitude and latitude grids corresponding to the valid_mask
-        import shapely
-
-        valid_points = [
-            shapely.Point(lon, lat)
-            for lon, lat, valid in zip(
-                self.lon_grid.flatten(), self.lat_grid.flatten(), valid_mask.flatten()
-            )
-            if valid
-        ]
-        valid_mask_gdf = gpd.GeoDataFrame(geometry=valid_points, crs=self.CRS.to_epsg())
-
-        matchup_gdf["is_valid"] = gpd.sjoin(
-            matchup_gdf, valid_mask_gdf, how="left", op="within"
-        ).index_right.notnull()
-
-        filtered_observations_gdf = observations_gdf[observations_gdf["is_valid"]]
-
-        # Use the valid mask to filter out invalid pixels from the observations
+        # Filter observation outside the image valid_mask
+        # valid_mask = self.get_valid_mask()
 
         pixex_df = pd.DataFrame()
         for uuid in tqdm(matchup_gdf["uuid"]):

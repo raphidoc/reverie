@@ -1,0 +1,1 @@
+/usr/bin/make -f /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/Makefile -C /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1 sixs
