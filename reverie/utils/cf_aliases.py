@@ -24,7 +24,7 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     # Radiometric quantities
     if alias in ["Lt"]:
         std_name = "upwelling_radiance_per_unit_wavelength_in_air"
-        std_unit = "W cm-2 nm-1 sr-1"
+        std_unit = "uW cm-2 nm-1 sr-1"
 
     # No standard
     if alias in ["rhot"]:

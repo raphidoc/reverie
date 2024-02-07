@@ -15,6 +15,7 @@ from p_tqdm import p_uimap
 import shapely
 import xarray as xr
 import math
+import zarr
 
 # REVERIE import
 from reverie.utils import helper
@@ -379,22 +380,22 @@ class ReveCube(ABC):
         nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
 
         # Create Dimensions
-        nc_ds.createDimension("W", len(self.wavelength))
-        nc_ds.createDimension("T", len([self.acq_time_z]))
-        nc_ds.createDimension("Z", len([self.z]))
-        nc_ds.createDimension("Y", len(self.y))
-        nc_ds.createDimension("X", len(self.x))
+        nc_ds.createDimension("wavelength", len(self.wavelength))
+        nc_ds.createDimension("time", len([self.acq_time_z]))
+        nc_ds.createDimension("z", len([self.z]))
+        nc_ds.createDimension("y", len(self.y))
+        nc_ds.createDimension("x", len(self.x))
 
-        band_var = nc_ds.createVariable("W", "f4", ("W",))
+        band_var = nc_ds.createVariable("wavelength", "f4", ("wavelength",))
         band_var.units = "nm"
         band_var.standard_name = "radiation_wavelength"
         band_var.long_name = "Central wavelengths of the converter bands"
-        band_var.axis = "Wavelength"
+        band_var.axis = "wavelength"
         band_var[:] = self.wavelength
 
         # Create coordinate variables
         # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
-        t_var = nc_ds.createVariable("T", "f4", ("T",))
+        t_var = nc_ds.createVariable("time", "f4", ("time",))
         t_var.standard_name = "time"
         t_var.long_name = "UTC acquisition time of remote sensing image"
         # CF convention for time zone is UTC if ommited
@@ -403,36 +404,36 @@ class ReveCube(ABC):
         t_var.calendar = "gregorian"
         t_var[:] = self.acq_time_z.timestamp()
 
-        z_var = nc_ds.createVariable("Z", "f4", ("Z",))
+        z_var = nc_ds.createVariable("z", "f4", ("z",))
         z_var.units = "m"
         z_var.standard_name = "altitude"
         z_var.long_name = (
             "Altitude is the viewing height above the geoid, positive upward"
         )
-        z_var.axis = "y"
+        z_var.axis = "z"
         z_var[:] = self.z
 
-        y_var = nc_ds.createVariable("Y", "f4", ("Y",))
+        y_var = nc_ds.createVariable("Y", "f4", ("y",))
         y_var.units = "m"
         y_var.standard_name = "projection_y_coordinate"
         y_var.long_name = "y-coordinate in projected coordinate system"
         y_var.axis = "y"
         y_var[:] = self.y
 
-        lat_var = nc_ds.createVariable("lat", "f4", ("Y",))
+        lat_var = nc_ds.createVariable("lat", "f4", ("y",))
         lat_var.standard_name = "latitude"
         lat_var.units = "degrees_north"
         # lat_var.long_name = 'latitude'
         lat_var[:] = self.lat
 
-        x_var = nc_ds.createVariable("X", "f4", ("X",))
+        x_var = nc_ds.createVariable("x", "f4", ("x",))
         x_var.units = "m"
         x_var.standard_name = "projection_x_coordinate"
         x_var.long_name = "x-coordinate in projected coordinate system"
         x_var.axis = "x"
         x_var[:] = self.x
 
-        lon_var = nc_ds.createVariable("lon", "f4", ("X",))
+        lon_var = nc_ds.createVariable("lon", "f4", ("x",))
         lon_var.standard_name = "longitude"
         lon_var.units = "degrees_east"
         # lon_var.long_name = 'longitude'
@@ -560,6 +561,137 @@ class ReveCube(ABC):
         -------
         """
         pass
+
+    def to_zarr(self, out_store: str = None):
+        if out_store is None:
+            raise Exception("out_file file not set, cannot create dataset")
+
+        try:
+            store = zarr.DirectoryStore("data/example.zarr")
+        except Exception as e:
+            print(e)
+            return
+
+        # # TODO validate that it follow the convention with cfdm / cf-python.
+        # #  For compatibility with GDAL NetCDF driver use CF-1.0
+        # nc_ds.Conventions = "CF-1.0"
+        # nc_ds.title = "Remote sensing image written by REVERIE"
+        # nc_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
+        #     "%Y-%m-%d %H:%M:%SZ"
+        # )
+        # nc_ds.institution = "AquaTel UQAR"
+        # nc_ds.source = "Remote sensing imagery"
+        # nc_ds.version = "0.1.0"
+        # nc_ds.references = "https://github.com/raphidoc/reverie"
+        # nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
+        #
+        # # Create Dimensions
+        # nc_ds.createDimension("W", len(self.wavelength))
+        # nc_ds.createDimension("T", len([self.acq_time_z]))
+        # nc_ds.createDimension("Z", len([self.z]))
+        # nc_ds.createDimension("Y", len(self.y))
+        # nc_ds.createDimension("X", len(self.x))
+
+        a = zarr.create(
+            shape=(20, 20),
+            chunks=(10),
+            dtype="i4",
+            fill_value=42,
+            compressor=zarr.Zlib(level=1),
+            store=store,
+            overwrite=True,
+        )
+
+        # band_var = nc_ds.createVariable("W", "f4", ("W",))
+        # band_var.units = "nm"
+        # band_var.standard_name = "radiation_wavelength"
+        # band_var.long_name = "Central wavelengths of the converter bands"
+        # band_var.axis = "Wavelength"
+        # band_var[:] = self.wavelength
+        #
+        # # Create coordinate variables
+        # # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
+        # t_var = nc_ds.createVariable("T", "f4", ("T",))
+        # t_var.standard_name = "time"
+        # t_var.long_name = "UTC acquisition time of remote sensing image"
+        # # CF convention for time zone is UTC if ommited
+        # # xarray will convert it to a datetime64[ns] object considering it is local time
+        # t_var.units = "seconds since 1970-01-01 00:00:00 +00:00"
+        # t_var.calendar = "gregorian"
+        # t_var[:] = self.acq_time_z.timestamp()
+        #
+        # z_var = nc_ds.createVariable("Z", "f4", ("Z",))
+        # z_var.units = "m"
+        # z_var.standard_name = "altitude"
+        # z_var.long_name = (
+        #     "Altitude is the viewing height above the geoid, positive upward"
+        # )
+        # z_var.axis = "y"
+        # z_var[:] = self.z
+        #
+        # y_var = nc_ds.createVariable("Y", "f4", ("Y",))
+        # y_var.units = "m"
+        # y_var.standard_name = "projection_y_coordinate"
+        # y_var.long_name = "y-coordinate in projected coordinate system"
+        # y_var.axis = "y"
+        # y_var[:] = self.y
+        #
+        # lat_var = nc_ds.createVariable("lat", "f4", ("Y",))
+        # lat_var.standard_name = "latitude"
+        # lat_var.units = "degrees_north"
+        # # lat_var.long_name = 'latitude'
+        # lat_var[:] = self.lat
+        #
+        # x_var = nc_ds.createVariable("X", "f4", ("X",))
+        # x_var.units = "m"
+        # x_var.standard_name = "projection_x_coordinate"
+        # x_var.long_name = "x-coordinate in projected coordinate system"
+        # x_var.axis = "x"
+        # x_var[:] = self.x
+        #
+        # lon_var = nc_ds.createVariable("lon", "f4", ("X",))
+        # lon_var.standard_name = "longitude"
+        # lon_var.units = "degrees_east"
+        # # lon_var.long_name = 'longitude'
+        # lon_var[:] = self.lon
+        #
+        # # grid_mapping
+        # crs = self.CRS
+        # print("Detected EPSG:" + str(crs.to_epsg()))
+        # cf_grid_mapping = crs.to_cf()
+        #
+        # grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())
+        #
+        # grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
+        # grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
+        # grid_mapping.semi_major_axis = cf_grid_mapping["semi_major_axis"]
+        # grid_mapping.semi_minor_axis = cf_grid_mapping["semi_minor_axis"]
+        # grid_mapping.inverse_flattening = cf_grid_mapping["inverse_flattening"]
+        # grid_mapping.reference_ellipsoid_name = cf_grid_mapping[
+        #     "reference_ellipsoid_name"
+        # ]
+        # grid_mapping.longitude_of_prime_meridian = cf_grid_mapping[
+        #     "longitude_of_prime_meridian"
+        # ]
+        # grid_mapping.prime_meridian_name = cf_grid_mapping["prime_meridian_name"]
+        # grid_mapping.geographic_crs_name = cf_grid_mapping["geographic_crs_name"]
+        # grid_mapping.horizontal_datum_name = cf_grid_mapping["horizontal_datum_name"]
+        # grid_mapping.projected_crs_name = cf_grid_mapping["projected_crs_name"]
+        # grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
+        # grid_mapping.latitude_of_projection_origin = cf_grid_mapping[
+        #     "latitude_of_projection_origin"
+        # ]
+        # grid_mapping.longitude_of_central_meridian = cf_grid_mapping[
+        #     "longitude_of_central_meridian"
+        # ]
+        # grid_mapping.false_easting = cf_grid_mapping["false_easting"]
+        # grid_mapping.false_northing = cf_grid_mapping["false_northing"]
+        # grid_mapping.scale_factor_at_central_meridian = cf_grid_mapping[
+        #     "scale_factor_at_central_meridian"
+        # ]
+        #
+        # # self.proj_var = grid_mapping
+        # self.out_ds = nc_ds
 
     def extract_pixel(
         self,

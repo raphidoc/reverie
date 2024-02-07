@@ -12,6 +12,8 @@ import re
 import netCDF4
 from p_tqdm import p_uimap
 import xarray as xr
+import zarr
+import numcodecs
 
 
 # REVERIE import
@@ -140,8 +142,8 @@ class Pix(ReveCube):
 
         # Geocorrection Look Up tables
         # In case Algae-WISE, glu file are named L2C
-        self.glu_hdr_f = os.path.join(image_dir, image_name + "-L2C.glu.hdr")
-        self.glu_f = os.path.join(image_dir, image_name + "-L2C.glu")
+        self.glu_hdr_f = os.path.join(image_dir, image_name + "-L1A.glu.hdr")
+        self.glu_f = os.path.join(image_dir, image_name + "-L1A.glu")
 
         # Navigation data: altitude, heading, pitch, roll, speed
         self.nav_f = os.path.join(image_dir, image_name + "-Navcor_sum.log")
@@ -316,194 +318,6 @@ class Pix(ReveCube):
         :return:
         """
 
-        # TODO: use p_uimap to create the NetCDF files band by band with multiple threads and then merge them.
-        #  The function works when callded with a single band but fails when called with multiple threads (bands).
-        #  Get TypeError: cannot pickle 'SwigPyObject' object.
-        #  Is this because we are accessing the same GDAL dataset with multiple threads ?
-        # def multi_thread_create_reve_nc(band):
-        #     out_file = (
-        #         f"{os.path.join(self.image_dir, 'L1_bands', 'band'+str(band))}-L1C.nc"
-        #     )
-        #
-        #     try:
-        #         nc_ds = netCDF4.Dataset(out_file, "w", format="NETCDF4")
-        #     except Exception as e:
-        #         print(e)
-        #         return
-        #
-        #     # TODO validate that it follow the convention with cfdm / cf-python.
-        #     #  For compatibility with GDAL NetCDF driver use CF-1.0
-        #     nc_ds.Conventions = "CF-1.0"
-        #     nc_ds.title = "Remote sensing image written by REVERIE"
-        #     nc_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
-        #         "%Y-%m-%d %H:%M:%SZ"
-        #     )
-        #     nc_ds.institution = "AquaTel UQAR"
-        #     nc_ds.source = "Remote sensing imagery"
-        #     nc_ds.version = "0.1.0"
-        #     nc_ds.references = "https://github.com/raphidoc/reverie"
-        #     nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
-        #
-        #     # Create Dimensions
-        #     nc_ds.createDimension("W", len([self.wavelength[band]]))
-        #     nc_ds.createDimension("T", len([self.acq_time_z]))
-        #     nc_ds.createDimension("Z", len([self.z]))
-        #     nc_ds.createDimension("Y", len(self.y))
-        #     nc_ds.createDimension("X", len(self.x))
-        #
-        #     band_var = nc_ds.createVariable("W", "f4", ("W",))
-        #     band_var.units = "nm"
-        #     band_var.standard_name = "radiation_wavelength"
-        #     band_var.long_name = "Central wavelengths of the converter bands"
-        #     band_var.axis = "Wavelength"
-        #     band_var[:] = self.wavelength[band]
-        #
-        #     # Create coordinate variables
-        #     # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
-        #     t_var = nc_ds.createVariable("T", "f4", ("T",))
-        #     t_var.standard_name = "time"
-        #     t_var.long_name = "UTC acquisition time of remote sensing image"
-        #     # CF convention for time zone is UTC if ommited
-        #     # xarray will convert it to a datetime64[ns] object considering it is local time
-        #     t_var.units = "seconds since 1970-01-01 00:00:00 +00:00"
-        #     t_var.calendar = "gregorian"
-        #     t_var[:] = self.acq_time_z.timestamp()
-        #
-        #     z_var = nc_ds.createVariable("Z", "f4", ("Z",))
-        #     z_var.units = "m"
-        #     z_var.standard_name = "altitude"
-        #     z_var.long_name = (
-        #         "Altitude is the viewing height above the geoid, positive upward"
-        #     )
-        #     z_var.axis = "y"
-        #     z_var[:] = self.z
-        #
-        #     y_var = nc_ds.createVariable("Y", "f4", ("Y",))
-        #     y_var.units = "m"
-        #     y_var.standard_name = "projection_y_coordinate"
-        #     y_var.long_name = "y-coordinate in projected coordinate system"
-        #     y_var.axis = "y"
-        #     y_var[:] = self.y
-        #
-        #     lat_var = nc_ds.createVariable("lat", "f4", ("Y",))
-        #     lat_var.standard_name = "latitude"
-        #     lat_var.units = "degrees_north"
-        #     # lat_var.long_name = 'latitude'
-        #     lat_var[:] = self.lat
-        #
-        #     x_var = nc_ds.createVariable("X", "f4", ("X",))
-        #     x_var.units = "m"
-        #     x_var.standard_name = "projection_x_coordinate"
-        #     x_var.long_name = "x-coordinate in projected coordinate system"
-        #     x_var.axis = "x"
-        #     x_var[:] = self.x
-        #
-        #     lon_var = nc_ds.createVariable("lon", "f4", ("X",))
-        #     lon_var.standard_name = "longitude"
-        #     lon_var.units = "degrees_east"
-        #     # lon_var.long_name = 'longitude'
-        #     lon_var[:] = self.lon
-        #
-        #     # grid_mapping
-        #     crs = self.CRS
-        #     # print("Detected EPSG:" + str(crs.to_epsg()))
-        #     cf_grid_mapping = crs.to_cf()
-        #
-        #     grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())
-        #
-        #     grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        #     grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
-        #     grid_mapping.semi_major_axis = cf_grid_mapping["semi_major_axis"]
-        #     grid_mapping.semi_minor_axis = cf_grid_mapping["semi_minor_axis"]
-        #     grid_mapping.inverse_flattening = cf_grid_mapping["inverse_flattening"]
-        #     grid_mapping.reference_ellipsoid_name = cf_grid_mapping[
-        #         "reference_ellipsoid_name"
-        #     ]
-        #     grid_mapping.longitude_of_prime_meridian = cf_grid_mapping[
-        #         "longitude_of_prime_meridian"
-        #     ]
-        #     grid_mapping.prime_meridian_name = cf_grid_mapping["prime_meridian_name"]
-        #     grid_mapping.geographic_crs_name = cf_grid_mapping["geographic_crs_name"]
-        #     grid_mapping.horizontal_datum_name = cf_grid_mapping[
-        #         "horizontal_datum_name"
-        #     ]
-        #     grid_mapping.projected_crs_name = cf_grid_mapping["projected_crs_name"]
-        #     grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        #     grid_mapping.latitude_of_projection_origin = cf_grid_mapping[
-        #         "latitude_of_projection_origin"
-        #     ]
-        #     grid_mapping.longitude_of_central_meridian = cf_grid_mapping[
-        #         "longitude_of_central_meridian"
-        #     ]
-        #     grid_mapping.false_easting = cf_grid_mapping["false_easting"]
-        #     grid_mapping.false_northing = cf_grid_mapping["false_northing"]
-        #     grid_mapping.scale_factor_at_central_meridian = cf_grid_mapping[
-        #         "scale_factor_at_central_meridian"
-        #     ]
-        #
-        #     # Easier to leave missing_value as the default _FillValue,
-        #     # but then GDAL doesn't recognize it ...
-        #     # self.no_data = netCDF4.default_fillvals[datatype]
-        #     # When scaling the default _FillValue, it get somehow messed up when reading with GDAL
-        #     self.no_data = math.trunc(netCDF4.default_fillvals["i4"] * 0.00001)
-        #
-        #     data_var = nc_ds.createVariable(
-        #         varname="Lt",
-        #         datatype="i4",
-        #         dimensions=("W", "Y", "X"),
-        #         fill_value=self.no_data,
-        #         compression="zlib",
-        #         complevel=1,
-        #     )
-        #
-        #     data_var.grid_mapping = "grid_mapping"  # self.proj_var.name
-        #
-        #     # Follow the standard name table CF convention
-        #     std_name, std_unit = get_cf_std_name(alias="Lt")
-        #
-        #     data_var.units = std_unit
-        #     data_var.standard_name = std_name
-        #     # data_var.long_name = ''
-        #
-        #     # self.__dst.variables['Rrs'].valid_min = 0
-        #     # self.__dst.variables['Rrs'].valid_max = 6000
-        #     data_var.missing_value = self.no_data
-        #
-        #     """
-        #     scale_factor is used by NetCDF CF in writing and reading
-        #     Reading: multiply by the scale_factor and add the add_offset
-        #     Writing: subtract the add_offset and divide by the scale_factor
-        #     If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
-        #     reciprocal of it.
-        #     """
-        #     data_var.scale_factor = self.scale_factor
-        #     data_var.add_offset = 0
-        #
-        #     # GDAL use 1 base index
-        #     data = self.src_ds.GetRasterBand(band)
-        #     data = data.ReadAsArray()
-        #     data = data * self.scale_factor
-        #
-        #     # Assign missing value
-        #     data[data == 0] = self.no_data * self.scale_factor
-        #
-        #     nc_ds.variables["Lt"][:, :, :] = data
-        #
-        #     nc_ds.close()
-        #
-        #     pass
-        #
-        # # multi_thread_create_reve_nc(7)
-        #
-        # iterator = p_uimap(multi_thread_create_reve_nc, range(1, 2, 1))
-        #
-        # for result in enumerate(iterator):
-        #     continue
-        #
-        # test = xr.open_mfdataset(
-        #     os.path.join(self.image_dir, self.image_name, "L1_bands")
-        # )
-
         # Create NetCDF file
         self.create_reve_nc(
             out_file=f"{os.path.join(self.image_dir, self.image_name)}-L1C.nc"
@@ -514,9 +328,9 @@ class Pix(ReveCube):
             var="Lt",
             datatype="i4",
             dimensions=(
-                "W",
-                "Y",
-                "X",
+                "wavelength",
+                "y",
+                "x",
             ),
             scale_factor=self.scale_factor,
         )
@@ -555,8 +369,8 @@ class Pix(ReveCube):
                 var=var,
                 datatype="i4",
                 dimensions=(
-                    "Y",
-                    "X",
+                    "y",
+                    "x",
                 ),
                 scale_factor=self.scale_factor,
             )
@@ -568,3 +382,258 @@ class Pix(ReveCube):
 
         self.out_ds.close()
         return
+
+    def to_zarr(self, out_store: str = None):
+        if out_store is None:
+            raise Exception("out_file file not set, cannot create dataset")
+
+        try:
+            store = zarr.DirectoryStore(out_store)
+        except Exception as e:
+            print(e)
+            return
+
+        root_grp = zarr.group(store, overwrite=True)
+
+        root_grp.attrs["Conventions"] = "CF-1.0"
+        root_grp.attrs["title"] = "Remote sensing image written by REVERIE"
+        root_grp.attrs[
+            "history"
+        ] = "File created on " + datetime.datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M:%SZ"
+        )
+        root_grp.attrs["institution"] = "AquaTel UQAR"
+        root_grp.attrs["source"] = "Remote sensing imagery"
+        root_grp.attrs["version"] = "0.1.0"
+        root_grp.attrs["references"] = "https://github.com/raphidoc/reverie"
+        root_grp.attrs[
+            "comment"
+        ] = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
+
+        w = root_grp.create_dataset(
+            "wavelength",
+            shape=(len(self.wavelength)),
+            chunks=(len(self.wavelength)),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        # _ARRAY_DIMENSIONS is xarray had hoc attribute
+        # to store the dimension following netCDF CF convention
+        w.attrs["_ARRAY_DIMENSIONS"] = ["wavelength"]
+        w.attrs["units"] = "nm"
+        w.attrs["standard_name"] = "radiation_wavelength"
+        w.attrs["long_name"] = "Central wavelengths of the sensor bands"
+        w.attrs["axis"] = "wavelength"
+        w[:] = self.wavelength
+
+        t = root_grp.create_dataset(
+            "time",
+            shape=(len([self.acq_time_z])),
+            chunks=(len([self.acq_time_z])),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        t.attrs["_ARRAY_DIMENSIONS"] = ["time"]
+        t.attrs["units"] = "seconds since 1970-01-01 00:00:00 +00:00"
+        t.attrs["standard_name"] = "time"
+        t.attrs["long_name"] = "UTC acquisition time of remote sensing image"
+        t[:] = self.acq_time_z.timestamp()
+
+        z = root_grp.create_dataset(
+            "z",
+            shape=(len([self.z])),
+            chunks=(len([self.z])),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        z.attrs["_ARRAY_DIMENSIONS"] = ["z"]
+        z.attrs["units"] = "m"
+        z.attrs["standard_name"] = "altitude"
+        z.attrs[
+            "long_name"
+        ] = "Altitude is the viewing height above the geoid, positive upward"
+        z[:] = self.z
+
+        y = root_grp.create_dataset(
+            "y",
+            shape=(len(self.y)),
+            chunks=(len(self.y)),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        y.attrs["_ARRAY_DIMENSIONS"] = ["y"]
+        y.attrs["units"] = "m"
+        y.attrs["standard_name"] = "projection_y_coordinate"
+        y.attrs["long_name"] = "y-coordinate in projected coordinate system"
+        y.attrs["axis"] = "y"
+        y[:] = self.y
+
+        lat = root_grp.create_dataset(
+            "lat",
+            shape=(len(self.y)),
+            chunks=(len(self.y)),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        lat.attrs["_ARRAY_DIMENSIONS"] = ["y"]
+        lat.attrs["units"] = "degrees_north"
+        lat.attrs["standard_name"] = "latitude"
+        lat[:] = self.lat
+
+        x = root_grp.create_dataset(
+            "x",
+            shape=(len(self.x)),
+            chunks=(len(self.x)),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        x.attrs["_ARRAY_DIMENSIONS"] = ["x"]
+        x.attrs["units"] = "m"
+        x.attrs["standard_name"] = "projection_x_coordinate"
+        x.attrs["long_name"] = "x-coordinate in projected coordinate system"
+        x.attrs["axis"] = "x"
+        x[:] = self.x
+
+        lon = root_grp.create_dataset(
+            "lon",
+            shape=(len(self.x)),
+            chunks=(len(self.x)),
+            dtype="f4",
+            compressor=zarr.Zlib(level=1),
+        )
+        lon.attrs["_ARRAY_DIMENSIONS"] = ["x"]
+        lon.attrs["units"] = "degrees_east"
+        lon.attrs["standard_name"] = "longitude"
+        lon[:] = self.lon
+
+        # grid_mapping
+        crs = self.CRS
+        print("Detected EPSG:" + str(crs.to_epsg()))
+        cf_grid_mapping = crs.to_cf()
+
+        grid_mapping = root_grp.create_dataset(
+            "grid_mapping",
+            shape=(),
+            chunks=(),
+            dtype="i4",
+        )
+
+        # For GDAL
+        # https://gdal.org/drivers/raster/zarr.html
+        root_grp.attrs["_CRS"] = crs.to_wkt()
+
+        grid_mapping.attrs["crs_wkt"] = cf_grid_mapping["crs_wkt"]
+        grid_mapping.attrs["semi_major_axis"] = cf_grid_mapping["semi_major_axis"]
+        grid_mapping.attrs["semi_minor_axis"] = cf_grid_mapping["semi_minor_axis"]
+        grid_mapping.attrs["inverse_flattening"] = cf_grid_mapping["inverse_flattening"]
+        grid_mapping.attrs["reference_ellipsoid_name"] = cf_grid_mapping[
+            "reference_ellipsoid_name"
+        ]
+        grid_mapping.attrs["longitude_of_prime_meridian"] = cf_grid_mapping[
+            "longitude_of_prime_meridian"
+        ]
+        grid_mapping.attrs["prime_meridian_name"] = cf_grid_mapping[
+            "prime_meridian_name"
+        ]
+        grid_mapping.attrs["geographic_crs_name"] = cf_grid_mapping[
+            "geographic_crs_name"
+        ]
+        grid_mapping.attrs["horizontal_datum_name"] = cf_grid_mapping[
+            "horizontal_datum_name"
+        ]
+        grid_mapping.attrs["projected_crs_name"] = cf_grid_mapping["projected_crs_name"]
+        grid_mapping.attrs["grid_mapping_name"] = cf_grid_mapping["grid_mapping_name"]
+        grid_mapping.attrs["latitude_of_projection_origin"] = cf_grid_mapping[
+            "latitude_of_projection_origin"
+        ]
+        grid_mapping.attrs["longitude_of_central_meridian"] = cf_grid_mapping[
+            "longitude_of_central_meridian"
+        ]
+        grid_mapping.attrs["false_easting"] = cf_grid_mapping["false_easting"]
+        grid_mapping.attrs["false_northing"] = cf_grid_mapping["false_northing"]
+        grid_mapping.attrs["scale_factor_at_central_meridian"] = cf_grid_mapping[
+            "scale_factor_at_central_meridian"
+        ]
+
+        # self.no_data = netCDF4.default_fillvals[datatype]
+        # When scaling the default _FillValue, get somehow messed up when reading with GDAL
+        self.no_data = math.trunc(netCDF4.default_fillvals["i4"] / 1000)
+
+        # filters = [numcodecs.Delta(dtype="i4")]
+        compressor = numcodecs.Blosc(
+            cname="zstd", clevel=3, shuffle=numcodecs.Blosc.SHUFFLE
+        )
+        # filters have to be an iterable, in case multiple filters are applied
+        # filters = [numcodecs.Quantize(digits=5, dtype="f4")]
+        # TODO, cannot make filters work properly
+        filters = [zarr.codecs.FixedScaleOffset(0, 1000, "f8")]
+
+        # Create radiometric variable
+        # chunk size is set to 1 wavelength to allow for parallel computation and I/O
+        # size along the spatial dimensions should be optimized for the available memory
+
+        # TODO: GDAL divide Lt along the spatial dimensions where we actually want a multiband dataset.
+        #   How to fix this ?
+
+        Lt = root_grp.create(
+            "Lt",
+            shape=(self.n_bands, self.n_rows, self.n_cols),
+            chunks=(1, 500, 500),
+            dtype="f8",
+            fill_value=self.no_data,
+            # filters=filters,
+            compressor=compressor,
+        )
+
+        Lt.attrs["_ARRAY_DIMENSIONS"] = ["wavelength", "y", "x"]
+
+        Lt.attrs["grid_mapping"] = "grid_mapping"  # self.proj_var.name
+
+        # Follow the standard name table CF convention
+        std_name, std_unit = get_cf_std_name(alias="Lt")
+        Lt.attrs["units"] = std_unit
+        Lt.attrs["standard_name"] = std_name
+
+        # self.n_bands = 1
+        for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
+            # GDAL use 1 base index
+            # Reading from GDAL can be really slow, would be nice to be able to parallelize this
+            data = self.src_ds.GetRasterBand(band + 1)
+            data = data.ReadAsArray()
+            data = data * self.scale_factor
+
+            data[data == 0] = np.nan  # self.no_data
+
+            # filters[0].encode(data).max()
+
+            Lt[
+                band, :, :
+            ] = data  # filters[0].encode(data).reshape(self.n_rows, self.n_cols)
+
+        # Create geometric variables
+        # geom = {
+        #     "SolAzi": self.solar_azimuth,
+        #     "SolZen": self.solar_zenith,
+        #     "ViewAzi": self.view_azimuth,
+        #     "ViewZen": self.viewing_zenith,
+        #     "RelativeAzimuth": self.relative_azimuth,
+        #     "SampleIndex": self.sample_index,
+        # }
+        #
+        # for var in tqdm(geom, desc="Writing geometry"):
+        #     self.create_var_nc(
+        #         var=var,
+        #         datatype="i4",
+        #         dimensions=(
+        #             "Y",
+        #             "X",
+        #         ),
+        #         scale_factor=self.scale_factor,
+        #     )
+        #     data = geom[var]
+        #
+        #     np.nan_to_num(data, copy=False, nan=self.no_data * self.scale_factor)
+        #
+        #     self.out_ds.variables[var][:, :] = data
+
+        zarr.convenience.consolidate_metadata(store, metadata_key=".zmetadata")
