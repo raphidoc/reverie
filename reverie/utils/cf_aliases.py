@@ -58,7 +58,7 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
         std_name = "solar_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["SolAzm"]:
+    if alias in ["SolAzi"]:
         std_name = "solar_azimuth_angle"
         std_unit = "degree"
 
@@ -66,7 +66,7 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
         std_name = "sensor_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["ViewAzm"]:
+    if alias in ["ViewAzi"]:
         std_name = "sensor_azimuth_angle"
         std_unit = "degree"
 
@@ -77,7 +77,12 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
 
     # No standard
     if alias in ["SampleIndex"]:
-        std_name = "position_index_of_across_track_push_broom_samples) "
+        std_name = "sensor_array_index_of_across_track_samples) "
+        std_unit = ""
+
+    # No standard
+    if alias in ["LineIndex"]:
+        std_name = "index_of_along_track_acquisition_line) "
         std_unit = ""
 
     if std_name is None:

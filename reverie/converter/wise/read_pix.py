@@ -47,22 +47,28 @@ class Pix(ReveCube):
     * -NAVCOR.log: full navigation log from the GNSS IMU system
     """
 
-    def __init__(self, image_dir, image_name):
+    def __init__(self, pix_dir):
         t0 = time.perf_counter()
 
-        if os.path.isdir(image_dir):
-            self.image_dir = image_dir
+        if os.path.isdir(pix_dir):
+            self.image_dir = pix_dir
         else:
-            raise ValueError("image_dir does not exist")
+            raise ValueError("pix_dir does not exist")
 
         # WISE radiometric data
-        self.hdr_f = os.path.join(image_dir, image_name + "-L1CG.pix.hdr")
-        self.pix_f = os.path.join(image_dir, image_name + "-L1CG.pix")
+
+        files = os.listdir(pix_dir)
+
+        hdr_f = [file for file in files if re.match(r".*\.pix\.hdr", file)][0]
+        self.hdr_f = os.path.join(pix_dir, hdr_f)
+
+        pix_f = [file for file in files if re.match(r".*\.pix$", file)][0]
+        self.pix_f = os.path.join(pix_dir, pix_f)
 
         if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
             print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
 
-        self.image_name = image_name
+        self.image_name = [re.findall(r".*(?=-L)", file) for file in files][0][0]
 
         # Open the .pix file with GDAL
         self.src_ds = gdal.Open(self.pix_f)
@@ -142,11 +148,15 @@ class Pix(ReveCube):
 
         # Geocorrection Look Up tables
         # In case Algae-WISE, glu file are named L2C
-        self.glu_hdr_f = os.path.join(image_dir, image_name + "-L1A.glu.hdr")
-        self.glu_f = os.path.join(image_dir, image_name + "-L1A.glu")
+
+        glu_hdr_f = [file for file in files if re.match(r".*\.glu\.hdr$", file)][0]
+        self.glu_hdr_f = os.path.join(pix_dir, glu_hdr_f)
+        glu_f = [file for file in files if re.match(r".*\.glu$", file)][0]
+        self.glu_f = os.path.join(pix_dir, glu_f)
 
         # Navigation data: altitude, heading, pitch, roll, speed
-        self.nav_f = os.path.join(image_dir, image_name + "-Navcor_sum.log")
+        nav_f = [file for file in files if re.match(r".*Navcor_sum\.log$", file)][0]
+        self.nav_f = os.path.join(pix_dir, nav_f)
 
         if (
             not os.path.isfile(self.glu_hdr_f)
@@ -194,7 +204,6 @@ class Pix(ReveCube):
         self.cal_view_geom()
 
         self.cal_relative_azimuth()
-
         t1 = time.perf_counter()
 
         print(
@@ -242,8 +251,9 @@ class Pix(ReveCube):
         v_azimuth_level1 = np.full((self.n_rows, self.n_cols), np.nan)
         # Initialize the sample position on spatial dimension of the imaging spectrometer array
         v_sample_array = np.full((self.n_rows, self.n_cols), np.nan)
+        v_line_array = np.full((self.n_rows, self.n_cols), np.nan)
 
-        # TODO: use multiprocessing here
+        # TODO: use multiprocessing here, and probably change the name row for line, it is confusing
         for row in tqdm(range(self.flightline.lines), desc="Processing GLU"):
             xs, ys = x_glu[row], y_glu[row]
             # print(xs,ys)
@@ -258,16 +268,21 @@ class Pix(ReveCube):
             v_zenith_level1[rows_c, cols_c] = v_zenith_fl[row][mask]
             v_azimuth_level1[rows_c, cols_c] = v_azimuth_fl[row][mask]
 
-            # Accros-track samples position on the spatial dimension of the imaging spectrometer array
+            # Across-track samples position on the spatial dimension of the imaging spectrometer array
             v_sample_array[rows_c, cols_c] = np.arange(0, self.flightline.samples)[mask]
+
+            # Line index for across-track selection of the imaging spectrometer array spatial dimension
+            v_line_array[rows_c, cols_c] = row
 
         self.viewing_zenith = helper.fill_na_2d(v_zenith_level1)
         self.view_azimuth = helper.fill_na_2d(v_azimuth_level1)
         self.sample_index = helper.fill_na_2d(v_sample_array)
+        self.line_index = helper.fill_na_2d(v_line_array)
 
         self.viewing_zenith[~self.get_valid_mask()] = np.nan
         self.view_azimuth[~self.get_valid_mask()] = np.nan
         self.sample_index[~self.get_valid_mask()] = np.nan
+        self.line_index[~self.get_valid_mask()] = np.nan
 
     def read_band(self, bandindex, tile: Tile = None):
         """
@@ -312,16 +327,19 @@ class Pix(ReveCube):
             Lt = self.read_band(iband)
             self._valid_mask = Lt > 0
 
-    def to_reve_nc(self):
+    def to_reve_nc(self, out_file: str = None):
         """
         Convert the Pix() object to reve NetCDF CF format
         :return:
         """
 
+        t0 = time.perf_counter()
+
+        if out_file is None:
+            out_file = self.image_dir.replace(".dpix", ".nc")
+
         # Create NetCDF file
-        self.create_reve_nc(
-            out_file=f"{os.path.join(self.image_dir, self.image_name)}-L1C.nc"
-        )
+        self.create_reve_nc(out_file)
 
         # Create radiometric variable
         self.create_var_nc(
@@ -334,7 +352,7 @@ class Pix(ReveCube):
             ),
             scale_factor=self.scale_factor,
         )
-        # self.n_bands
+        # self.n_bands = 1
         for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
             # GDAL use 1 base index
             # Reading from GDAL can be realy slow
@@ -362,6 +380,7 @@ class Pix(ReveCube):
             "ViewZen": self.viewing_zenith,
             "RelativeAzimuth": self.relative_azimuth,
             "SampleIndex": self.sample_index,
+            "LineIndex": self.line_index,
         }
 
         for var in tqdm(geom, desc="Writing geometry"):
@@ -381,11 +400,16 @@ class Pix(ReveCube):
             self.out_ds.variables[var][:, :] = data
 
         self.out_ds.close()
+        t1 = time.perf_counter()
+
+        print(f"Exported {self.__class__.__name__} to REVE.nc in {t1-t0:.2f}s")
         return
 
     def to_zarr(self, out_store: str = None):
+        t0 = time.perf_counter()
+
         if out_store is None:
-            raise Exception("out_file file not set, cannot create dataset")
+            raise Exception("out_store not set, cannot create dataset")
 
         try:
             store = zarr.DirectoryStore(out_store)
@@ -394,6 +418,17 @@ class Pix(ReveCube):
             return
 
         root_grp = zarr.group(store, overwrite=True)
+
+        # grid_mapping
+        crs = self.CRS
+        print("Detected EPSG:" + str(crs.to_epsg()))
+
+        # For GDAL
+        # https://gdal.org/drivers/raster/zarr.html
+        root_grp.attrs["_CRS"] = {
+            "url": "http://www.opengis.net/def/crs/EPSG/0/" + str(crs.to_epsg()),
+            "wkt": crs.to_wkt(),
+        }
 
         root_grp.attrs["Conventions"] = "CF-1.0"
         root_grp.attrs["title"] = "Remote sensing image written by REVERIE"
@@ -506,11 +541,6 @@ class Pix(ReveCube):
         lon.attrs["standard_name"] = "longitude"
         lon[:] = self.lon
 
-        # grid_mapping
-        crs = self.CRS
-        print("Detected EPSG:" + str(crs.to_epsg()))
-        cf_grid_mapping = crs.to_cf()
-
         grid_mapping = root_grp.create_dataset(
             "grid_mapping",
             shape=(),
@@ -518,9 +548,12 @@ class Pix(ReveCube):
             dtype="i4",
         )
 
-        # For GDAL
-        # https://gdal.org/drivers/raster/zarr.html
-        root_grp.attrs["_CRS"] = crs.to_wkt()
+        # For xarray:
+        # the grid_mapping variable MUST have the _ARRAY_DIMENSIONS attribute even if it is empty
+        grid_mapping.attrs["_ARRAY_DIMENSIONS"] = []
+
+        # Maybe not necessary but it follows the CF convention
+        cf_grid_mapping = crs.to_cf()
 
         grid_mapping.attrs["crs_wkt"] = cf_grid_mapping["crs_wkt"]
         grid_mapping.attrs["semi_major_axis"] = cf_grid_mapping["semi_major_axis"]
@@ -564,22 +597,19 @@ class Pix(ReveCube):
             cname="zstd", clevel=3, shuffle=numcodecs.Blosc.SHUFFLE
         )
         # filters have to be an iterable, in case multiple filters are applied
-        # filters = [numcodecs.Quantize(digits=5, dtype="f4")]
+        filters = [numcodecs.Quantize(digits=3, dtype="f4")]
         # TODO, cannot make filters work properly
-        filters = [zarr.codecs.FixedScaleOffset(0, 1000, "f8")]
+        #  https://zarr.readthedocs.io/en/stable/spec/v2.html#filters
+        filters = [zarr.codecs.FixedScaleOffset(0, 1000, "f4")]
 
         # Create radiometric variable
         # chunk size is set to 1 wavelength to allow for parallel computation and I/O
         # size along the spatial dimensions should be optimized for the available memory
-
-        # TODO: GDAL divide Lt along the spatial dimensions where we actually want a multiband dataset.
-        #   How to fix this ?
-
         Lt = root_grp.create(
             "Lt",
             shape=(self.n_bands, self.n_rows, self.n_cols),
             chunks=(1, 500, 500),
-            dtype="f8",
+            dtype="<f4",
             fill_value=self.no_data,
             # filters=filters,
             compressor=compressor,
@@ -588,6 +618,10 @@ class Pix(ReveCube):
         Lt.attrs["_ARRAY_DIMENSIONS"] = ["wavelength", "y", "x"]
 
         Lt.attrs["grid_mapping"] = "grid_mapping"  # self.proj_var.name
+        Lt.attrs["_CRS"] = {
+            "url": "http://www.opengis.net/def/crs/EPSG/0/" + str(crs.to_epsg()),
+            "wkt": crs.to_wkt(),
+        }
 
         # Follow the standard name table CF convention
         std_name, std_unit = get_cf_std_name(alias="Lt")
@@ -610,30 +644,45 @@ class Pix(ReveCube):
                 band, :, :
             ] = data  # filters[0].encode(data).reshape(self.n_rows, self.n_cols)
 
+        # GDAL doesn't seem to be able to read the the spectral data (wavelength, y, y)
+        # when just spatial data is also present (y, x)
         # Create geometric variables
-        # geom = {
-        #     "SolAzi": self.solar_azimuth,
-        #     "SolZen": self.solar_zenith,
-        #     "ViewAzi": self.view_azimuth,
-        #     "ViewZen": self.viewing_zenith,
-        #     "RelativeAzimuth": self.relative_azimuth,
-        #     "SampleIndex": self.sample_index,
-        # }
-        #
-        # for var in tqdm(geom, desc="Writing geometry"):
-        #     self.create_var_nc(
-        #         var=var,
-        #         datatype="i4",
-        #         dimensions=(
-        #             "Y",
-        #             "X",
-        #         ),
-        #         scale_factor=self.scale_factor,
-        #     )
-        #     data = geom[var]
-        #
-        #     np.nan_to_num(data, copy=False, nan=self.no_data * self.scale_factor)
-        #
-        #     self.out_ds.variables[var][:, :] = data
+        geom = {
+            "SolAzi": self.solar_azimuth,
+            "SolZen": self.solar_zenith,
+            "ViewAzi": self.view_azimuth,
+            "ViewZen": self.viewing_zenith,
+            "RelativeAzimuth": self.relative_azimuth,
+            "SampleIndex": self.sample_index,
+            "LineIndex": self.line_index,
+        }
 
+        for var in tqdm(geom, desc="Writing geometry"):
+            array_zarr = root_grp.create(
+                var,
+                shape=(self.n_rows, self.n_cols),
+                chunks=(500, 500),
+                dtype="f4",
+                fill_value=self.no_data,
+                # filters=filters,
+                compressor=compressor,
+            )
+
+            array_zarr.attrs["_ARRAY_DIMENSIONS"] = ["y", "x"]
+
+            array_zarr.attrs["_CRS"] = {
+                "url": "http://www.opengis.net/def/crs/EPSG/0/" + str(crs.to_epsg()),
+                "wkt": crs.to_wkt(),
+            }
+
+            data = geom[var]
+
+            array_zarr[:, :] = data
+
+        # Write consolidated metadata
         zarr.convenience.consolidate_metadata(store, metadata_key=".zmetadata")
+
+        t1 = time.perf_counter()
+
+        print(f"Exported {self.__class__.__name__} to Zarr in {t1-t0:.2f}s")
+        # No need to close the store, it is never really opened

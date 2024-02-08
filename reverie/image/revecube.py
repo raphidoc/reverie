@@ -58,6 +58,34 @@ class ReveCube(ABC):
     """
 
     @classmethod
+    def from_zarr(self, src_store):
+        """Populate ReveCube object from zarr store
+
+        Parameters
+        ----------
+        src_store: str
+            zarr store to read from
+
+        Returns
+        -------
+        """
+
+        if os.path.isdir(src_store):
+            src_ds = xr.open_zarr(src_store, consolidated=True)
+        else:
+            raise Exception(f"Directory {src_store} does not exist")
+
+        # Spectral attributes
+        wavelength = src_ds.variables["W"].data
+
+        # Spatiotemporal attributes
+        time_var = src_ds.variables["T"]
+        # if time is decoded by xarray as datetime64[ns], convert it to datetime.datetime
+        # ts = (
+        #     time_var.data[0] - np.datetime64("1970-01-01T00:00:00Z")
+        # ) / np.timedelta64(1, "s")
+
+    @classmethod
     def from_reve_nc(cls, src_file):
         """Populate ReveCube object from reve CF NetCDF dataset
 
@@ -181,6 +209,7 @@ class ReveCube(ABC):
 
         # Pixel location on the sensor array
         self.sample_index = None
+        self.line_index = None
 
     def __str__(self):
         return f"""
@@ -413,7 +442,7 @@ class ReveCube(ABC):
         z_var.axis = "z"
         z_var[:] = self.z
 
-        y_var = nc_ds.createVariable("Y", "f4", ("y",))
+        y_var = nc_ds.createVariable("y", "f4", ("y",))
         y_var.units = "m"
         y_var.standard_name = "projection_y_coordinate"
         y_var.long_name = "y-coordinate in projected coordinate system"
