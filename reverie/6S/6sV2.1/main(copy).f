@@ -2667,9 +2667,9 @@ c --- aerosols model (type) ----
        aer_model(7)="Stratospheric aerosol model"
        aer_model(11)="Sun Photometer aerosol model"
                 
-      if (iaer.ge.1.and.iaer.lt.4) write (iwr,132) aer_model(iaer)
-      if (iaer.ge.5.and.iaer.le.7) write (iwr,132) aer_model(iaer)
-      if (iaer.eq.11) write(iwr,132) aer_model(iaer)
+      if (iaer.ge.1.and.iaer.lt.4) write (*,*)'"aerosol_model":', aer_model(iaer), ','
+      if (iaer.ge.5.and.iaer.le.7) write (*,*)'"aerosol_model":', aer_model(iaer), ','
+      if (iaer.eq.11) write (*,*)'"aerosol_model":', aer_model(iaer), ','
       
       endif
       
@@ -3354,7 +3354,8 @@ c      we define the degrees of polarization
 	sdpray=100.*srpray/sroray
 	if (sroaer.ne.0) then
 	 sdpaer=100.*srpaer/sroaer
-	else sdpaer=0.0
+	else
+	 sdpaer=0.0
 	endif 
 	sdptot=100.*srptot/srotot
 c      and we compute the direction of the plane of polarization

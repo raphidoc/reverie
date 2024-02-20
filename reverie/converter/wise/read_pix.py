@@ -68,7 +68,7 @@ class Pix(ReveCube):
         if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
             print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
 
-        self.image_name = [re.findall(r".*(?=-L)", file) for file in files][0][0]
+        self.image_name = [re.findall(r".*(?=-L|-N)", file) for file in files][0][0]
 
         # Open the .pix file with GDAL
         self.src_ds = gdal.Open(self.pix_f)
@@ -177,8 +177,8 @@ class Pix(ReveCube):
             self.z = self.flightline.height
 
         super().__init__(
-            src_file=self.pix_f,
-            src_ds=self.src_ds,
+            in_path=self.pix_f,
+            in_ds=self.src_ds,
             wavelength=self.wavelength,
             acq_time_z=self.acq_time_z,
             z=self.z,

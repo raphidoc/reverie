@@ -58,7 +58,7 @@ class ReveCube(ABC):
     """
 
     @classmethod
-    def from_zarr(self, src_store):
+    def from_zarr(cls, in_path: str):
         """Populate ReveCube object from zarr store
 
         Parameters
@@ -70,60 +70,57 @@ class ReveCube(ABC):
         -------
         """
 
-        if os.path.isdir(src_store):
-            src_ds = xr.open_zarr(src_store, consolidated=True)
+        if os.path.isdir(in_path):
+            in_ds = xr.open_zarr(in_path, consolidated=True, decode_times=False)
         else:
-            raise Exception(f"Directory {src_store} does not exist")
+            raise Exception(f"Directory {in_path} does not exist")
 
-        # Spectral attributes
-        wavelength = src_ds.variables["W"].data
-
-        # Spatiotemporal attributes
-        time_var = src_ds.variables["T"]
-        # if time is decoded by xarray as datetime64[ns], convert it to datetime.datetime
-        # ts = (
-        #     time_var.data[0] - np.datetime64("1970-01-01T00:00:00Z")
-        # ) / np.timedelta64(1, "s")
+        return cls.decode_xr(in_path, in_ds)
 
     @classmethod
-    def from_reve_nc(cls, src_file):
+    def from_reve_nc(cls, in_path: str):
         """Populate ReveCube object from reve CF NetCDF dataset
 
         Parameters
         ----------
-        src_file: str
+        in_path: str
             NetcCDF (.nc) CF-1.0 compliant file to read from
 
         Returns
         -------
         """
 
-        if os.path.isfile(src_file):
-            src_ds = xr.open_dataset(src_file, decode_times=False)
+        if os.path.isfile(in_path):
+            in_ds = xr.open_dataset(in_path, decode_times=False)
         else:
-            raise Exception(f"File {src_file} does not exist")
+            raise Exception(f"File {in_path} does not exist")
 
+        return cls.decode_xr(in_path, in_ds)
+
+    @classmethod
+    def decode_xr(cls, in_path, in_ds: xr.Dataset):
         # Spectral attributes
-        wavelength = src_ds.variables["W"].data
+        wavelength = in_ds.variables["wavelength"].data
 
         # Spatiotemporal attributes
-        time_var = src_ds.variables["T"]
+        time_var = in_ds.variables["time"]
         # if time is decoded by xarray as datetime64[ns], convert it to datetime.datetime
         # ts = (
         #     time_var.data[0] - np.datetime64("1970-01-01T00:00:00Z")
         # ) / np.timedelta64(1, "s")
-        # TODO: better define acq_time_z as image center datetime
+        # TODO: better define acq_time_z as image center datetime,
+        #  also is this should be decoded by xarray or not ?
         acq_time_z = datetime.datetime.utcfromtimestamp(time_var.data[0])
-        altitude_var = src_ds.variables["Z"]
+        altitude_var = in_ds.variables["z"]
         z = altitude_var[:][0]
-        y = src_ds.variables["Y"][:].data
-        x = src_ds.variables["X"][:].data
-        lat = src_ds.variables["lat"][:].data
-        lon = src_ds.variables["lon"][:].data
-        n_rows = src_ds.dims["Y"]
-        n_cols = src_ds.dims["X"]
+        y = in_ds.variables["y"][:].data
+        x = in_ds.variables["x"][:].data
+        lat = in_ds.variables["lat"][:].data
+        lon = in_ds.variables["lon"][:].data
+        n_rows = in_ds.dims["y"]
+        n_cols = in_ds.dims["x"]
 
-        grid_mapping = src_ds.variables["grid_mapping"]
+        grid_mapping = in_ds.variables["grid_mapping"]
 
         # TODO: affine transformation sould be read from the grid_mapping
         #   CF doesn't define a way to store it
@@ -131,8 +128,8 @@ class ReveCube(ABC):
         crs = pyproj.CRS.from_wkt(grid_mapping.attrs["crs_wkt"])
 
         return cls(
-            src_file,
-            src_ds,
+            in_path,
+            in_ds,
             wavelength,
             acq_time_z,
             z,
@@ -148,8 +145,8 @@ class ReveCube(ABC):
 
     def __init__(
         self,
-        src_file: str,
-        src_ds: xr.Dataset,
+        in_path: str,
+        in_ds: xr.Dataset,
         wavelength: np.ndarray,
         acq_time_z,
         z: float,
@@ -163,8 +160,8 @@ class ReveCube(ABC):
         crs: pyproj.crs.CRS,
     ):
         # Dataset accessor
-        self.in_file = src_file
-        self.in_ds = src_ds
+        self.in_path = in_path
+        self.in_ds = in_ds
 
         # Spectral attributes
         self.wavelength = wavelength
@@ -348,9 +345,9 @@ class ReveCube(ABC):
         :return: _valid_mask
         """
         if self._valid_mask is None:
-            # Select the first variable with dim (W, Y, X) to compute the valid mask
+            # Select the first variable with dim (wavelength, y, x) to compute the valid mask
             for name, data in self.in_ds.data_vars.items():
-                if data.dims == ("W", "Y", "X"):
+                if data.dims == ("wavelength", "y", "x"):
                     self._valid_mask = data.isel(W=0).notnull().data
                     break
 
@@ -524,7 +521,7 @@ class ReveCube(ABC):
         datatype : str
             Data type of the variable to write to the NetCDF dataset
         dimensions : tuple
-            Contain the dimension of the var with the form ('W', 'Y', 'X',).
+            Contain the dimension of the var with the form ('wavelength', 'y', 'x',).
         scale_factor : float
             scale_factor is used by NetCDF CF in writing and reading for lossy compression.
         compression : str, default: 'zlib'
@@ -601,126 +598,8 @@ class ReveCube(ABC):
             print(e)
             return
 
-        # # TODO validate that it follow the convention with cfdm / cf-python.
-        # #  For compatibility with GDAL NetCDF driver use CF-1.0
-        # nc_ds.Conventions = "CF-1.0"
-        # nc_ds.title = "Remote sensing image written by REVERIE"
-        # nc_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
-        #     "%Y-%m-%d %H:%M:%SZ"
-        # )
-        # nc_ds.institution = "AquaTel UQAR"
-        # nc_ds.source = "Remote sensing imagery"
-        # nc_ds.version = "0.1.0"
-        # nc_ds.references = "https://github.com/raphidoc/reverie"
-        # nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
-        #
-        # # Create Dimensions
-        # nc_ds.createDimension("W", len(self.wavelength))
-        # nc_ds.createDimension("T", len([self.acq_time_z]))
-        # nc_ds.createDimension("Z", len([self.z]))
-        # nc_ds.createDimension("Y", len(self.y))
-        # nc_ds.createDimension("X", len(self.x))
-
-        a = zarr.create(
-            shape=(20, 20),
-            chunks=(10),
-            dtype="i4",
-            fill_value=42,
-            compressor=zarr.Zlib(level=1),
-            store=store,
-            overwrite=True,
-        )
-
-        # band_var = nc_ds.createVariable("W", "f4", ("W",))
-        # band_var.units = "nm"
-        # band_var.standard_name = "radiation_wavelength"
-        # band_var.long_name = "Central wavelengths of the converter bands"
-        # band_var.axis = "Wavelength"
-        # band_var[:] = self.wavelength
-        #
-        # # Create coordinate variables
-        # # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
-        # t_var = nc_ds.createVariable("T", "f4", ("T",))
-        # t_var.standard_name = "time"
-        # t_var.long_name = "UTC acquisition time of remote sensing image"
-        # # CF convention for time zone is UTC if ommited
-        # # xarray will convert it to a datetime64[ns] object considering it is local time
-        # t_var.units = "seconds since 1970-01-01 00:00:00 +00:00"
-        # t_var.calendar = "gregorian"
-        # t_var[:] = self.acq_time_z.timestamp()
-        #
-        # z_var = nc_ds.createVariable("Z", "f4", ("Z",))
-        # z_var.units = "m"
-        # z_var.standard_name = "altitude"
-        # z_var.long_name = (
-        #     "Altitude is the viewing height above the geoid, positive upward"
-        # )
-        # z_var.axis = "y"
-        # z_var[:] = self.z
-        #
-        # y_var = nc_ds.createVariable("Y", "f4", ("Y",))
-        # y_var.units = "m"
-        # y_var.standard_name = "projection_y_coordinate"
-        # y_var.long_name = "y-coordinate in projected coordinate system"
-        # y_var.axis = "y"
-        # y_var[:] = self.y
-        #
-        # lat_var = nc_ds.createVariable("lat", "f4", ("Y",))
-        # lat_var.standard_name = "latitude"
-        # lat_var.units = "degrees_north"
-        # # lat_var.long_name = 'latitude'
-        # lat_var[:] = self.lat
-        #
-        # x_var = nc_ds.createVariable("X", "f4", ("X",))
-        # x_var.units = "m"
-        # x_var.standard_name = "projection_x_coordinate"
-        # x_var.long_name = "x-coordinate in projected coordinate system"
-        # x_var.axis = "x"
-        # x_var[:] = self.x
-        #
-        # lon_var = nc_ds.createVariable("lon", "f4", ("X",))
-        # lon_var.standard_name = "longitude"
-        # lon_var.units = "degrees_east"
-        # # lon_var.long_name = 'longitude'
-        # lon_var[:] = self.lon
-        #
-        # # grid_mapping
-        # crs = self.CRS
-        # print("Detected EPSG:" + str(crs.to_epsg()))
-        # cf_grid_mapping = crs.to_cf()
-        #
-        # grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())
-        #
-        # grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        # grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
-        # grid_mapping.semi_major_axis = cf_grid_mapping["semi_major_axis"]
-        # grid_mapping.semi_minor_axis = cf_grid_mapping["semi_minor_axis"]
-        # grid_mapping.inverse_flattening = cf_grid_mapping["inverse_flattening"]
-        # grid_mapping.reference_ellipsoid_name = cf_grid_mapping[
-        #     "reference_ellipsoid_name"
-        # ]
-        # grid_mapping.longitude_of_prime_meridian = cf_grid_mapping[
-        #     "longitude_of_prime_meridian"
-        # ]
-        # grid_mapping.prime_meridian_name = cf_grid_mapping["prime_meridian_name"]
-        # grid_mapping.geographic_crs_name = cf_grid_mapping["geographic_crs_name"]
-        # grid_mapping.horizontal_datum_name = cf_grid_mapping["horizontal_datum_name"]
-        # grid_mapping.projected_crs_name = cf_grid_mapping["projected_crs_name"]
-        # grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
-        # grid_mapping.latitude_of_projection_origin = cf_grid_mapping[
-        #     "latitude_of_projection_origin"
-        # ]
-        # grid_mapping.longitude_of_central_meridian = cf_grid_mapping[
-        #     "longitude_of_central_meridian"
-        # ]
-        # grid_mapping.false_easting = cf_grid_mapping["false_easting"]
-        # grid_mapping.false_northing = cf_grid_mapping["false_northing"]
-        # grid_mapping.scale_factor_at_central_meridian = cf_grid_mapping[
-        #     "scale_factor_at_central_meridian"
-        # ]
-        #
-        # # self.proj_var = grid_mapping
-        # self.out_ds = nc_ds
+        # TODO: write a reve cube to a zarr store
+        pass
 
     def extract_pixel(
         self,
@@ -755,7 +634,7 @@ class ReveCube(ABC):
         # iterator = p_uimap(extractor, matchup_gdf["UUID"])
 
         # load the nc dataset with xarray
-        xr_ds = xr.open_dataset(self.in_file)
+        xr_ds = self.in_ds
 
         matchup_gdf = pd.read_csv(matchup_file)
         matchup_gdf.columns = matchup_gdf.columns.str.lower()
@@ -771,6 +650,7 @@ class ReveCube(ABC):
                 abs(matchup_gdf["datetime"] - self.acq_time_z)
                 < pd.Timedelta(max_time_diff, unit="h")
             ]
+            # TODO: write a warning and exit if no data remain after time filtering.
 
         # matchup_gdf = matchup_gdf[valid_mask]
 
@@ -800,7 +680,7 @@ class ReveCube(ABC):
             # - `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0])`: The `np.abs` function takes the absolute value of each difference, effectively giving the distance of each pixel to the specific longitude.
             #
             # - `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()`: Finally, the `argmin` function is used to find the index of the smallest value in the array of distances. This is the index of the pixel that is closest to the specific longitude.
-            x_coords, y_coords = xr_ds.X.values, xr_ds.Y.values
+            x_coords, y_coords = xr_ds.x.values, xr_ds.y.values
             x_index = np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()
             y_index = np.abs(y_coords - shapely.get_y(temp_gdf.geometry)[0]).argmin()
 
@@ -816,8 +696,8 @@ class ReveCube(ABC):
             # So, `slice(max(0, x_index - half_window), x_index + half_window + 1)` creates a slice object that represents the indices of the window around the selected pixel. This slice object can then be used to select the window from the xarray Dataset.
             half_window = window_size // 2
             data_sel = xr_ds.isel(
-                X=slice(max(0, x_index - half_window), x_index + half_window + 1),
-                Y=slice(max(0, y_index - half_window), y_index + half_window + 1),
+                y=slice(max(0, y_index - half_window), y_index + half_window + 1),
+                x=slice(max(0, x_index - half_window), x_index + half_window + 1),
             )
 
             # import holoviews as hv
@@ -843,7 +723,7 @@ class ReveCube(ABC):
             #
             # ds = hv.Dataset(data_sel, vdims=["Lt"])
             #
-            # plot = ds.to(hv.Image, kdims=["X", "Y"], dynamic=True).hist()
+            # plot = ds.to(hv.Image, kdims=["x", "y"], dynamic=True).hist()
             #
             # renderer = hv.renderer("bokeh")
             # renderer.save(
@@ -880,3 +760,35 @@ class ReveCube(ABC):
             pixex_df = pd.concat([pixex_df, temp_pixex_df], axis=0)
 
         return pixex_df
+
+    def extract_pixel_line(self, line_index: int, line_window: int):
+        xr_ds = self.in_ds
+
+        # Step 1: Stack the 'y' and 'x' dimensions into a single dimension 'yx'
+        stacked_ds = xr_ds.stack(yx=("y", "x"))
+
+        # Step 2: Assign 'LineIndex' as a coordinate to the stacked Dataset
+        LineIndex = xr_ds["LineIndex"].values.flatten()
+        stacked_ds = stacked_ds.assign_coords(LineIndex=("yx", LineIndex))
+
+        # Step 3: Swap the 'yx' dimension with 'LineIndex'
+        xr_ds_swapped = stacked_ds.swap_dims({"yx": "LineIndex"})
+
+        # Method of transforming LineIndex as a coordinate variable and reindexing the dataset onto it
+        # Using .sel work but only for a single value of line_index as ther is
+        # necessary duplicate in the coordinate variable.
+        # This break the assumption that coordinate variables are monotic.
+        # See: https://docs.xarray.dev/en/latest/user-guide/indexing.html
+        # and: https://docs.unidata.ucar.edu/nug/current/netcdf_data_set_components.html#coordinate_variables
+        # extracted_line = xr_ds_swapped.sel(LineIndex=line_index)
+
+        # To select more than one line we can create a boolean mask for the line window
+        # A bit slow
+        mask = (xr_ds_swapped["LineIndex"] >= line_index) & (
+            xr_ds_swapped["LineIndex"] <= line_index + line_window
+        )
+        extracted_line = xr_ds_swapped.where(mask, drop=True)
+
+        extracted_line = extracted_line.to_dataframe()
+
+        return extracted_line

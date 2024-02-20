@@ -1,5 +1,6 @@
 import subprocess
 import pandas as pd
+from tqdm import tqdm
 
 
 def run_viccal_6s(params: str):
@@ -18,24 +19,20 @@ def run_viccal_6s(params: str):
 
 if __name__ == "__main__":
     input_data = pd.read_csv(
-        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/ACI12_merged_data.csv"
+        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/Lt_rhow_merged.csv"
     )
 
-    # Initialize the output columns
-    input_data["atmospheric_path_radiance"] = 0
-    input_data["background_radiance"] = 0
-    input_data["pixel_radiance"] = 0
-
-    for i in range(len(input_data)):
+    temp = pd.DataFrame()
+    for i in tqdm(range(len(input_data))):
         kwargs = {
-            "sol_zen": input_data["SolZen.x"][i],
-            "sol_azi": input_data["SolAzm.x"][i],
-            "view_zen": input_data["ViewZen"][i],
-            "view_azi": input_data["ViewAzm"][i],
+            "sol_zen": input_data["SolZen_mean"][i],
+            "sol_azi": input_data["SolAzi_mean"][i],
+            "view_zen": input_data["ViewZen_mean"][i],
+            "view_azi": input_data["ViewAzi_mean"][i],
             "aot550": 0.04,
             "sensor_altitude": -3.049,
             "wavelength": input_data["Wavelength"][i] * 1e-3,
-            "water_reflectance": input_data["rhow"][i],
+            "water_reflectance": input_data["rhow_plus_glint"][i],
         }
 
         input_str = "\n".join(
@@ -71,7 +68,7 @@ if __name__ == "__main__":
             ]
         )
 
-        # with open("/home/raphael/PycharmProjects/reverie/reverie/6S/in.txt", "w") as f:
+        # with open("/reverie/6S/in.txt", "w") as f:
         #     f.writelines(input_str)
 
         res = run_viccal_6s(input_str)
@@ -80,12 +77,21 @@ if __name__ == "__main__":
 
         test = json.loads(res)
 
-        input_data[list(test.keys())[0]][i] = test[list(test.keys())[0]]
-        input_data[list(test.keys())[1]][i] = test[list(test.keys())[1]]
-        input_data[list(test.keys())[2]][i] = test[list(test.keys())[2]]
+        test = pd.DataFrame([test])
+        test.index = [i]
+        #
+        # # Create a new DataFrame with the same columns as `input_data`
+        # test = pd.DataFrame([test], columns=input_data.columns)
+        #
+        # # Append `test` to `input_data`
+        # input_data = input_data.append(test, ignore_index=True)
+
+        temp = pd.concat([temp, test], axis=0)
+
+    input_data = pd.concat([input_data, temp], axis=1)
 
     input_data.to_csv(
-        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/6S/6S_ACI12_merged_data.csv"
+        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/6S/6S_Lt_rhow_merged.csv"
     )
 
     # with open("/home/raphael/PycharmProjects/reverie/reverie/6S/out.txt", "w") as f:

@@ -69,7 +69,7 @@ if __name__ == "__main__":
         "month": 1,
         "day": 1,
         # Atmospheric conditions, gas (idatm: 0, 1, 2, 3, 4, 5, 6) REDUCE PARAMS
-        "no_gas": int,
+        "no_gas": 0,
         "tropical": 1,
         "mid_lat_summer": 2,
         "mid_lat_winter": 3,
