@@ -25,10 +25,10 @@ if __name__ == "__main__":
     # )
 
     # MC-50
-    l1 = wise.read_pix.Pix(
-        pix_dir="/D/Data/WISE/MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.dpix",
-    )
-
+    # l1 = wise.read_pix.Pix(
+    #     pix_dir="/D/Data/WISE/MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.dpix",
+    # )
+    #
     # l1.to_reve_nc()
     #
     # reve_nc = ReveCube.from_reve_nc(
@@ -46,11 +46,11 @@ if __name__ == "__main__":
     # )
 
     # MC-10
-    # l1 = wise.read_pix.Pix(
-    #     pix_dir="/D/Data/TEST/TEST_WISE/MC-10A/",
-    # )
-    #
-    # l1.to_reve_nc()
+    l1 = wise.read_pix.Pix(
+        pix_dir="/D/Data/WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.dpix",
+    )
+
+    l1.to_reve_nc()
     #
     # reve_nc = ReveCube.from_reve_nc(
     #     "/D/Data/TEST/TEST_WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc"

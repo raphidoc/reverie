@@ -18,7 +18,7 @@ import math
 import zarr
 
 # REVERIE import
-from reverie.utils import helper
+from reverie.utils import helper, astronomy
 from reverie.utils.tile import Tile
 from reverie.utils.cf_aliases import get_cf_std_name
 
@@ -28,33 +28,54 @@ class ReveCube(ABC):
     ReveCube class is used as the base template for spectral imagery data structure in REVERIE.
     This class is to be expanded by converter specific class as in ../converter/wise/read_pix.py
 
-        Attributes
+    The class is designed to be used with the xarray library to handle multi-dimensional arrays.
+
+    Parameters
     ----------
-    Affine : Affine()
-        Affine trnasformation
-    n_rows : int
-        number of rows
-    n_cols : int
-        number of columns
-    CRS : pyproj.crs.CRS
-        a pyproj.crs.CRS object
+    in_path: str
+        Path to the input dataset
+    in_ds: xarray.Dataset
+        xarray Dataset object
+    wavelength: np.ndarray
+        Array of wavelength
+    acq_time_z: datetime
+        Image acquisition time in UTC
+    z: float
+        Altitude of the sensor
+    y: np.ndarray
+        Array of y coordinates
+    x: np.ndarray
+        Array of x coordinates
+    lat: np.ndarray
+        Array of latitude
+    lon: np.ndarray
+        Array of longitude
+    n_rows: int
+        Number of rows
+    n_cols: int
+        Number of columns
+    affine: Affine
+        Affine transformation
+    crs: pyproj.crs.CRS
+        Coordinate Reference System
 
-    acq_time_z: Acquisition time in UTC
-    acq_time_local: Acquisition time in local time
-    central_lon_local_timezone: Used to compute solar geometry
+    Attributes
+    ----------
 
-    solar_zenith:
-        spatially resolved solar zenith [?], is this really needed ? over a decakilometer scale difference is minime
-    solar_azimuth: spatially resolved solar azimuth [?]
-
-    viewing_zenith: spatially resolved viewing zenith [?]
-    view_azimuth: spatially resolved viewing azimuth [?]
-    relative_azimuth:spatially resolved relative azimuth (solar_azimuth - view_azimuth) [?]
-    sample_index: position of pixel on the detector array spatial dimension (pushbroom converter only)
-
-        Methods
+    Methods
     -------
-    cal_coordinate(): Compute the x, y projected coordinate from Affine, n_rows, n_cols and CRS
+    from_zarr
+    from_reve_nc
+    decode_xr
+    __init__
+    __str__
+    cal_coordinate
+    cal_coordinate_grid
+    cal_time
+    cal_sun_geom
+    get_valid_mask
+    cal_valid_mask
+
     """
 
     @classmethod
@@ -303,32 +324,27 @@ class ReveCube(ABC):
         print(f"central longitude of {tz}:{self.central_lon_local_timezone}")
 
     def cal_sun_geom(self):
-        """
-        calculate solar zenith and azimuth angle
-        based on Meeus, J. (1998). Astronomical Algorithms. Willmann-Bell, Inc.
-        and on: https://gml.noaa.gov/grad/solcalc/calcdetails.html
-        :return:
+        """ calculate solar zenith and azimuth angle for each pixel in the scene
+        Parameters
+        ----------
+        acq_time_local: local time of image acquisition
+        lat_grid: latitude grid
+        lon_grid: longitude grid
+
+        Returns
+        -------
+        solar_zenith: spatially resolved solar zenith [degree]
+        solar_azimuth: spatially resolved solar azimuth [degree]
         """
 
+        utc_offset = self.acq_time_local.utcoffset().total_seconds() / 3600
 
-        # hour_angle = helper.cal_solar_hour_angle(
-        #     self.lon_grid, self.central_lon_local_timezone, self.acq_time_local
-        # )
-        #
-        # year, month, day = (
-        #     self.acq_time_z.year,
-        #     self.acq_time_z.month,
-        #     self.acq_time_z.day,
-        # )
-        #
-        # declination = helper.cal_declination(year, month, day)
-        #
-        # self.solar_zenith, self.solar_azimuth = helper.cal_solar_zenith_azimuth(
-        #     self.lat_grid, hour_angle, declination
-        # )
-        #
-        # self.solar_zenith[~self.get_valid_mask()] = np.nan
-        # self.solar_azimuth[~self.get_valid_mask()] = np.nan
+        self.solar_zenith, self.solar_azimuth = astronomy.sun_geom_noaa(
+            self.acq_time_local, utc_offset, self.lat_grid, self.lon_grid
+        )
+
+        self.solar_zenith[~self.get_valid_mask()] = np.nan
+        self.solar_azimuth[~self.get_valid_mask()] = np.nan
 
     def get_valid_mask(self, tile: Tile = None):
         """

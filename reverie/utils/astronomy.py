@@ -1,4 +1,4 @@
-from math import *
+import numpy as np
 import datetime
 
 
@@ -50,21 +50,46 @@ def date_time_to_julian_day(date_time: datetime):
 
 
 def sun_geom_meeus(date_time, obs_latitude):
+    """Compute the solar azimuth and altitude using the Meeus (1998) algorithm NOT WORKING
+    Parameters
+    ----------
+    date_time: datetime
+        The date time to convert to Julian Day
+    obs_latitude: float
+        The latitude of the observation in decimal degrees, positive north
+
+    Returns
+    -------
+    sun_azimuth: float
+        The solar azimuth angle in decimal degrees measured from the south, positive westward (0 - 180)
+    sun_altitude: float
+        The solar altitude angle in decimal degrees measured from the horizon, positive above the horizon (0 - 90)
+
+    Notes
+    -----
+    The algorithm used here is from [1]_.
+
+    References
+    ----------
+    .. [1] Meeus, J. (1998) Astronomical algorithms. 2nd ed. Richmond, Va: Willmann-Bell.
+    """
     julian_day = date_time_to_julian_day(date_time)
 
+    # eq. 24.1
     julian_centuries = (julian_day - 2451545.0) / 36525
 
+    # Mean longitude of the sun eq. 24.2: $L_o$
     mean_lon_sun = (
         280.46645 + 36000.76983 * julian_centuries + 0.0003032 * julian_centuries**2
     )
 
     # In nooa calc, it is mean_lon_sun % 360
-    mean_lon_sun = mean_lon_sun % 360
+    # mean_lon_sun = mean_lon_sun % 360
 
     # Mean longitude of the moon: $L^'$
     mean_lon_moon = 218.3165 + 481267.8813 * julian_centuries
 
-    # Mean anomaly of the sun: $M$ [degree]
+    # Mean anomaly of the sun eq. 24.3: $M$ [degree]
     mean_anomaly_sun = (
         357.52910
         + 35999.05030 * julian_centuries
@@ -72,64 +97,66 @@ def sun_geom_meeus(date_time, obs_latitude):
         - 0.00000048 * julian_centuries**3
     )
 
-    # Eccentricity of the Earth's orbit: $e$
+    # Eccentricity of the Earth's orbit eq. 24.4: $e$
     eccentricity_earth = (
         0.016708617
         - 0.000042037 * julian_centuries
         - 0.0000001236 * julian_centuries**2
     )
 
-    # Sun equation of center: $C$
+    # Sun equation of center chapter 24: $C$
     center_sun = (
         (1.914600 - 0.004817 * julian_centuries - 0.000014 * julian_centuries**2)
-        * sin(radians(mean_anomaly_sun))
-        + (0.019993 - 0.000101 * julian_centuries) * sin(2 * radians(mean_anomaly_sun))
-        + 0.000290 * sin(3 * radians(mean_anomaly_sun))
+        * np.sin(np.radians(mean_anomaly_sun))
+        + (0.019993 - 0.000101 * julian_centuries)
+        * np.sin(2 * np.radians(mean_anomaly_sun))
+        + 0.000290 * np.sin(3 * np.radians(mean_anomaly_sun))
     )
 
-    # Sun true longitude: $\theta$ [degree]
+    # Sun true longitude chapter 24: $\theta$ [degree]
     true_longitude_sun = mean_lon_sun + center_sun
 
     # Sun true anomaly: $v$ [degree]
     true_anomaly_sun = mean_anomaly_sun + center_sun
 
-    # Sun radius vector (sun-earth distance): $R$ [astronomical units]
-    radius_vector_sun = (1.000001018 * (1 - eccentricity_earth**2)) / (
-        1 + eccentricity_earth * cos(radians(true_anomaly_sun))
-    )
+    # Sun radius vector (sun-earth distance) eq. 24.5: $R$ [astronomical units]
+    # radius_vector_sun = (1.000001018 * (1 - eccentricity_earth**2)) / (
+    #     1 + eccentricity_earth * np.cos(np.radians(true_anomaly_sun))
+    # )
 
     # Longitude of the ascending node of the moon mean orbit: $\omega$ [degree]
     # Simplified polynomial for the reduced precision nutation obliquity
     # See page 132 of Meeus (1998)
     # Also called as a correction factor for nutation and aberration on page 152
     lon_asc_node_moon_ecliptic = (
-        125.04452 - 1934.136261 * julian_centuries
+        125.04452 - 1934.136 * julian_centuries
     )  # + 0.0020708 * julian_centuries**2 + julian_centuries**3/450000
 
     # Sun apparent longitude: $\lambda$
     apparent_longitude_sun = (
         true_longitude_sun
         - 0.00569
-        - 0.00478 * sin(radians(lon_asc_node_moon_ecliptic))
+        - 0.00478 * np.sin(np.radians(lon_asc_node_moon_ecliptic))
     )
 
     nutation_longitude = (
-        -17.20 * sin(radians(lon_asc_node_moon_ecliptic))
-        - 1.32 * sin(2 * radians(mean_lon_sun))
-        - 0.23 * sin(2 * radians(mean_lon_moon))
-        + 0.21 * sin(2 * radians(lon_asc_node_moon_ecliptic))
+        -17.20 * np.sin(np.radians(lon_asc_node_moon_ecliptic))
+        - 1.32 * np.sin(2 * np.radians(mean_lon_sun))
+        - 0.23 * np.sin(2 * np.radians(mean_lon_moon))
+        + 0.21 * np.sin(2 * np.radians(lon_asc_node_moon_ecliptic))
     )
 
     # Nutation in obliquity: $\delta\epsilon$
     # Reduced precision at 0".1
     nutation_obliquity = (
-        9.20 * cos(radians(lon_asc_node_moon_ecliptic))
-        + 0.57 * cos(2 * radians(mean_lon_sun))
-        + 0.10 * cos(2 * radians(mean_lon_moon))
-        - 0.09 * cos(2 * radians(lon_asc_node_moon_ecliptic))
+        9.20 * np.cos(np.radians(lon_asc_node_moon_ecliptic))
+        + 0.57 * np.cos(2 * np.radians(mean_lon_sun))
+        + 0.10 * np.cos(2 * np.radians(mean_lon_moon))
+        - 0.09 * np.cos(2 * np.radians(lon_asc_node_moon_ecliptic))
     )
 
-    # Mean obliquity of the ecliptic: $\epsilon_o$
+    # Mean obliquity of the ecliptic eq. 21.2: $\epsilon_o$
+    # Here, $\epsilon_o$ == $\epsilon$
     # The input value is given as 23° 26' 21".448
     # TODO: different values for the two formulas that should be the same.
     # mean_obliquity_ecliptic = (
@@ -159,30 +186,36 @@ def sun_geom_meeus(date_time, obs_latitude):
         / 60
     )
 
-    # Truee obliquity of the ecliptic: $\epsilon$
-    true_obliquity_ecliptic = mean_obliquity_ecliptic + nutation_obliquity
+    # True obliquity of the ecliptic chapter 21: $\epsilon$
+    # Apparently, from NOAA spreadsheet, we use only the corrected mean obliquity of the ecliptic
+    # true_obliquity_ecliptic = mean_obliquity_ecliptic + nutation_obliquity
 
+    # Correction for the apparent position of the sun chapter 24: $\epsilon$
+    # Here, $\epsilon_o$ == $\epsilon$
     mean_obliquity_ecliptic_cor = mean_obliquity_ecliptic
-    +0.00256 * cos(radians(lon_asc_node_moon_ecliptic))
+    +0.00256 * np.cos(np.radians(lon_asc_node_moon_ecliptic))
 
-    # Right ascension of the sun: $a$
+    # Right ascension of the sun eq. 24.6: $a$
     # + 0.00256 * math.cos(omega) is the correction factor when computing apparent position
-    right_ascension_sun = atan2(
-        cos(radians(mean_obliquity_ecliptic_cor))
-        * sin(radians(apparent_longitude_sun)),
-        cos(radians(apparent_longitude_sun)),
+    right_ascension_sun = np.degrees(
+        np.arctan2(
+            np.cos(np.radians(mean_obliquity_ecliptic_cor))
+            * np.sin(np.radians(apparent_longitude_sun)),
+            np.cos(np.radians(apparent_longitude_sun)),
+        )
     )
 
-    right_ascension_sun = degrees(right_ascension_sun)
-
-    # Declination of the sun
-    declination_sun = asin(
-        sin(radians(mean_obliquity_ecliptic_cor)) * sin(radians(apparent_longitude_sun))
+    # Declination of the sun eq. 24.7: $\delta$
+    declination_sun = np.degrees(
+        np.arcsin(
+            np.sin(np.radians(mean_obliquity_ecliptic_cor))
+            * np.sin(np.radians(apparent_longitude_sun))
+        )
     )
 
-    declination_sun = degrees(declination_sun)
+    # TODO: debug from here
 
-    # Greenwich mean sideral time: $\theta_o$
+    # Greenwich mean sideral time eq. 11.4: $\theta_o$
     greenwich_mean_sideral_time = (
         280.46061837
         + 360.9864736629 * (julian_day - 2451545.0)
@@ -191,8 +224,8 @@ def sun_geom_meeus(date_time, obs_latitude):
     )
 
     # nutation in right ascension
-    nutation_right_ascension = nutation_longitude * cos(
-        radians(true_obliquity_ecliptic)
+    nutation_right_ascension = nutation_longitude * np.cos(
+        np.radians(mean_obliquity_ecliptic_cor)
     )
 
     # Greenwich mean sideral time corrected for nutation
@@ -203,25 +236,51 @@ def sun_geom_meeus(date_time, obs_latitude):
 
     # Sun azimuth: $A$
     # Positive westward from south
-    sun_azimuth = atan2(
-        sin(local_hour_angle),
-        cos(local_hour_angle) * sin(obs_latitude)
-        - tan(declination_sun) * cos(obs_latitude),
+    sun_azimuth = np.arctan2(
+        np.sin(local_hour_angle),
+        np.cos(local_hour_angle) * np.sin(obs_latitude)
+        - np.tan(declination_sun) * np.cos(obs_latitude),
     )
 
     # Sun altitude: $h$
     # Positive above the horizon
-    sun_altitude = sin(obs_latitude) * sin(declination_sun) + cos(obs_latitude) * cos(
-        declination_sun
-    ) * cos(local_hour_angle)
+    sun_altitude = np.sin(obs_latitude) * np.sin(declination_sun) + np.cos(
+        obs_latitude
+    ) * np.cos(declination_sun) * np.cos(local_hour_angle)
 
-    sun_azimuth = degrees(sun_azimuth)
-    sun_altitude = degrees(sun_altitude)
+    sun_azimuth = np.degrees(sun_azimuth)
+    sun_altitude = np.degrees(sun_altitude)
 
     return sun_azimuth, sun_altitude
 
 
-def sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude):
+def sun_geom_noaa(date_time, utc_offset, obs_latitude, obs_longitude):
+    """ "calculate the solar zenith and azimuth angles with the NOAA algorithm
+    Parameters
+    ----------
+    date_time: datetime
+        The date time to calculate the solar zenith and azimuth angles
+    utc_offset: int
+        The UTC offset of the location in hours
+    obs_latitude: float
+        The latitude of the location in decimal degrees
+    obs_longitude: float
+        The longitude of the location in decimal degrees
+
+    Returns
+    -------
+    sun_zenith: float
+        The solar zenith angle in decimal degrees measured from the vertical (0 - 180)
+    sun_azimuth: float
+        The solar azimuth angle in decimal degrees measured clockwise from the north (0 - 360)
+
+    Notes
+    -----
+    The algorithm used here is the one from the NOAA spreadsheet available at
+    https://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html
+    The main difference with the Meeus (1998) algorithm is the use of the equation of time
+    """
+
     julian_day = date_time_to_julian_day(date_time)
 
     julian_centuries = (julian_day - 2451545.0) / 36525
@@ -248,9 +307,10 @@ def sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude):
     # Sun equation of center: $C$
     center_sun = (
         (1.914600 - 0.004817 * julian_centuries - 0.000014 * julian_centuries**2)
-        * sin(radians(mean_anomaly_sun))
-        + (0.019993 - 0.000101 * julian_centuries) * sin(2 * radians(mean_anomaly_sun))
-        + 0.000290 * sin(3 * radians(mean_anomaly_sun))
+        * np.sin(np.radians(mean_anomaly_sun))
+        + (0.019993 - 0.000101 * julian_centuries)
+        * np.sin(2 * np.radians(mean_anomaly_sun))
+        + 0.000290 * np.sin(3 * np.radians(mean_anomaly_sun))
     )
 
     # Sun true longitude: $\theta$ [degree]
@@ -271,7 +331,7 @@ def sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude):
     apparent_longitude_sun = (
         true_longitude_sun
         - 0.00569
-        - 0.00478 * sin(radians(lon_asc_node_moon_ecliptic))
+        - 0.00478 * np.sin(np.radians(lon_asc_node_moon_ecliptic))
     )
 
     # Fromm noaa
@@ -296,43 +356,43 @@ def sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude):
 
     # Mean obliquity of the ecliptic [degree]
     mean_obliquity_ecliptic_cor = mean_obliquity_ecliptic
-    +0.00256 * cos(radians(lon_asc_node_moon_ecliptic))
+    +0.00256 * np.cos(np.radians(lon_asc_node_moon_ecliptic))
 
     # Right ascension of the sun: $a$ [degree]
-    right_ascension_sun = degrees(
-        atan2(
-            cos(radians(mean_obliquity_ecliptic_cor))
-            * sin(radians(apparent_longitude_sun)),
-            cos(radians(apparent_longitude_sun)),
+    right_ascension_sun = np.degrees(
+        np.arctan2(
+            np.cos(np.radians(mean_obliquity_ecliptic_cor))
+            * np.sin(np.radians(apparent_longitude_sun)),
+            np.cos(np.radians(apparent_longitude_sun)),
         )
     )
 
     # Declination of the sun
-    declination_sun = degrees(
-        asin(
-            sin(radians(mean_obliquity_ecliptic_cor))
-            * sin(radians(apparent_longitude_sun))
+    declination_sun = np.degrees(
+        np.arcsin(
+            np.sin(np.radians(mean_obliquity_ecliptic_cor))
+            * np.sin(np.radians(apparent_longitude_sun))
         )
     )
 
-    var_y = tan(mean_obliquity_ecliptic_cor / 2 * pi / 180) * tan(
-        mean_obliquity_ecliptic_cor / 2 * pi / 180
+    var_y = np.tan(np.radians(mean_obliquity_ecliptic_cor / 2)) * np.tan(
+        np.radians(mean_obliquity_ecliptic_cor / 2)
     )
 
     # Equation of time from NOAA, don't know where it comes from
-    eq_of_time = 4 * degrees(
-        var_y * sin(2 * radians(mean_lon_sun))
-        - 2 * eccentricity_earth * sin(radians(mean_anomaly_sun))
+    eq_of_time = 4 * np.degrees(
+        var_y * np.sin(2 * np.radians(mean_lon_sun))
+        - 2 * eccentricity_earth * np.sin(np.radians(mean_anomaly_sun))
         + 4
         * eccentricity_earth
         * var_y
-        * sin(radians(mean_anomaly_sun))
-        * cos(2 * radians(mean_lon_sun))
-        - 0.5 * var_y * var_y * sin(4 * radians(mean_lon_sun))
+        * np.sin(np.radians(mean_anomaly_sun))
+        * np.cos(2 * np.radians(mean_lon_sun))
+        - 0.5 * var_y * var_y * np.sin(4 * np.radians(mean_lon_sun))
         - 1.25
         * eccentricity_earth
         * eccentricity_earth
-        * sin(2 * radians(mean_anomaly_sun))
+        * np.sin(2 * np.radians(mean_anomaly_sun))
     )
 
     decimal_day = (
@@ -344,55 +404,71 @@ def sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude):
     # B4 is longitude positive towards east
     # B5 is time zone, positive towards east
     true_solar_time = (
-        decimal_day * 1440 + eq_of_time + 4 * obs_longitude - 60 * time_zone
+        decimal_day * 1440 + eq_of_time + 4 * obs_longitude - 60 * utc_offset
     ) % 1440
 
     # Hour angle from NOAA [degree]
-    if true_solar_time / 4 < 0:
+    if np.all(true_solar_time / 4 < 0):
         local_hour_angle = true_solar_time / 4 + 180
-    else:
+    elif np.all(true_solar_time / 4 >= 0):
         local_hour_angle = true_solar_time / 4 - 180
+    else:
+        raise ValueError("The grid span on both side of 0 degree")
 
     # Sun zenith angle from NOAA [deg]
     # B3 is latitude positive to north
-    sun_zenith = degrees(
-        acos(
-            sin(radians(obs_latitude)) * sin(radians(declination_sun))
-            + cos(radians(obs_latitude))
-            * cos(radians(declination_sun))
-            * cos(radians(local_hour_angle))
+    sun_zenith = np.degrees(
+        np.arccos(
+            np.sin(np.radians(obs_latitude)) * np.sin(np.radians(declination_sun))
+            + np.cos(np.radians(obs_latitude))
+            * np.cos(np.radians(declination_sun))
+            * np.cos(np.radians(local_hour_angle))
         )
     )
 
     # Sun azimuth from NOAA from [degree]
-    if local_hour_angle > 0:
+    if np.all(local_hour_angle > 0):
         sun_azimuth = (
-            degrees(
-                acos(
+            np.degrees(
+                np.arccos(
                     (
-                        (sin(radians(obs_latitude)) * cos(radians(sun_zenith)))
-                        - sin(radians(declination_sun))
+                        (
+                            np.sin(np.radians(obs_latitude))
+                            * np.cos(np.radians(sun_zenith))
+                        )
+                        - np.sin(np.radians(declination_sun))
                     )
-                    / (cos(radians(obs_latitude)) * sin(radians(sun_zenith)))
+                    / (
+                        np.cos(np.radians(obs_latitude))
+                        * np.sin(np.radians(sun_zenith))
+                    )
                 )
             )
             + 180
         ) % 360
-    else:
+    elif np.all(local_hour_angle <= 0):
         sun_azimuth = (
             540
-            - degrees(
-                acos(
+            - np.degrees(
+                np.arccos(
                     (
-                        (sin(radians(obs_latitude)) * cos(radians(sun_zenith)))
-                        - sin(radians(declination_sun))
+                        (
+                            np.sin(np.radians(obs_latitude))
+                            * np.cos(np.radians(sun_zenith))
+                        )
+                        - np.sin(np.radians(declination_sun))
                     )
-                    / (cos(radians(obs_latitude)) * sin(radians(sun_zenith)))
+                    / (
+                        np.cos(np.radians(obs_latitude))
+                        * np.sin(np.radians(sun_zenith))
+                    )
                 )
             )
         ) % 360
+    else:
+        raise ValueError("The grid span on both side of 0 degree")
 
-    return sun_azimuth, sun_zenith
+    return sun_zenith, sun_azimuth
 
 
 if __name__ == "__main__":
@@ -403,4 +479,4 @@ if __name__ == "__main__":
 
     sun_geom_noaa(date_time, time_zone, obs_latitude, obs_longitude)
 
-    #sun_geom_meeus(date_time, obs_latitude)
+    # sun_geom_meeus(date_time, obs_latitude)
