@@ -221,7 +221,6 @@ def fill_na_2d(arr: np.ndarray):
     )
     return df_.values
 
-
 # -------------------------------SOLAR GEOMETRY-------------------------------------------------#
 def cal_solar_hour_angle(longitude, longitude_timezone, time):
     """
@@ -263,8 +262,11 @@ def cal_declination(year, month, day):
     :return:  sun declination (degree)
     """
     delta = datetime(year, month, day) - datetime(year, 1, 1)
+
     days = delta.days + 1
+
     b = 2 * np.pi * (days - 1) / 365.0
+
     declination = (
         0.006918
         - 0.399912 * np.cos(b)
@@ -278,7 +280,7 @@ def cal_declination(year, month, day):
     return math.degrees(declination)
 
 
-def calSolarZenithAzimuth(latitude, hour_angle, declination):
+def cal_solar_zenith_azimuth(latitude, hour_angle, declination):
     """
     calculate solar elevation and azimuth
     :param latitude: latitude

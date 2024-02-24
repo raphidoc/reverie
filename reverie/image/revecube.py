@@ -304,27 +304,31 @@ class ReveCube(ABC):
 
     def cal_sun_geom(self):
         """
-        calculate solar zenith angle and azimuth angle
+        calculate solar zenith and azimuth angle
+        based on Meeus, J. (1998). Astronomical Algorithms. Willmann-Bell, Inc.
+        and on: https://gml.noaa.gov/grad/solcalc/calcdetails.html
         :return:
         """
-        # TODO: check Meeus, J. (1998). Astronomical Algorithms. Willmann-Bell, Inc.
-        hour_angle = helper.cal_solar_hour_angle(
-            self.lon_grid, self.central_lon_local_timezone, self.acq_time_local
-        )
 
-        year, month, day = (
-            self.acq_time_z.year,
-            self.acq_time_z.month,
-            self.acq_time_z.day,
-        )
 
-        declination = helper.cal_declination(year, month, day)
-        self.solar_zenith, self.solar_azimuth = helper.calSolarZenithAzimuth(
-            self.lat_grid, hour_angle, declination
-        )
-
-        self.solar_zenith[~self.get_valid_mask()] = np.nan
-        self.solar_azimuth[~self.get_valid_mask()] = np.nan
+        # hour_angle = helper.cal_solar_hour_angle(
+        #     self.lon_grid, self.central_lon_local_timezone, self.acq_time_local
+        # )
+        #
+        # year, month, day = (
+        #     self.acq_time_z.year,
+        #     self.acq_time_z.month,
+        #     self.acq_time_z.day,
+        # )
+        #
+        # declination = helper.cal_declination(year, month, day)
+        #
+        # self.solar_zenith, self.solar_azimuth = helper.cal_solar_zenith_azimuth(
+        #     self.lat_grid, hour_angle, declination
+        # )
+        #
+        # self.solar_zenith[~self.get_valid_mask()] = np.nan
+        # self.solar_azimuth[~self.get_valid_mask()] = np.nan
 
     def get_valid_mask(self, tile: Tile = None):
         """
