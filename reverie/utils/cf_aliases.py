@@ -54,34 +54,34 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     # Relative azimuth angle = angle_of_rotation_from_solar_azimuth_to_platform_azimuth [degree]
     # platform_azimuth_angle / sensor_azimuth_angle / relative_platform_azimuth_angle / relative_sensor_azimuth_angle ?
 
-    if alias in ["SolZen"]:
+    if alias in ["sun_zenith"]:
         std_name = "solar_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["SolAzi"]:
+    if alias in ["sun_azimuth"]:
         std_name = "solar_azimuth_angle"
         std_unit = "degree"
 
-    if alias in ["ViewZen"]:
+    if alias in ["view_zenith"]:
         std_name = "sensor_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["ViewAzi"]:
+    if alias in ["view_azimuth"]:
         std_name = "sensor_azimuth_angle"
         std_unit = "degree"
 
-    if alias in ["RelativeAzimuth"]:
+    if alias in ["relative_azimuth"]:
         # Should be: angle_of_rotation_from_solar_azimuth_to_sensor_azimuth
         std_name = "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
         std_unit = "degree"
 
     # No standard
-    if alias in ["SampleIndex"]:
+    if alias in ["sample_index"]:
         std_name = "sensor_array_index_of_across_track_samples) "
         std_unit = ""
 
     # No standard
-    if alias in ["LineIndex"]:
+    if alias in ["line_index"]:
         std_name = "index_of_along_track_acquisition_line) "
         std_unit = ""
 

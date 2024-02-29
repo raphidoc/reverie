@@ -274,12 +274,12 @@ class Pix(ReveCube):
             # Line index for across-track selection of the imaging spectrometer array spatial dimension
             v_line_array[rows_c, cols_c] = row
 
-        self.viewing_zenith = helper.fill_na_2d(v_zenith_level1)
+        self.view_zenith = helper.fill_na_2d(v_zenith_level1)
         self.view_azimuth = helper.fill_na_2d(v_azimuth_level1)
         self.sample_index = helper.fill_na_2d(v_sample_array)
         self.line_index = helper.fill_na_2d(v_line_array)
 
-        self.viewing_zenith[~self.get_valid_mask()] = np.nan
+        self.view_zenith[~self.get_valid_mask()] = np.nan
         self.view_azimuth[~self.get_valid_mask()] = np.nan
         self.sample_index[~self.get_valid_mask()] = np.nan
         self.line_index[~self.get_valid_mask()] = np.nan
@@ -374,10 +374,10 @@ class Pix(ReveCube):
 
         # Create geometric variables
         geom = {
-            "sun_azimuth": self.solar_azimuth,
-            "sun_zenith": self.solar_zenith,
+            "sun_azimuth": self.sun_azimuth,
+            "sun_zenith": self.sun_zenith,
             "view_azimuth": self.view_azimuth,
-            "viewing_zenith": self.viewing_zenith,
+            "view_zenith": self.view_zenith,
             "relative_azimuth": self.relative_azimuth,
             "sample_index": self.sample_index,
             "line_index": self.line_index,
@@ -648,13 +648,13 @@ class Pix(ReveCube):
         # when just spatial data is also present (y, x)
         # Create geometric variables
         geom = {
-            "SolAzi": self.solar_azimuth,
-            "SolZen": self.solar_zenith,
-            "ViewAzi": self.view_azimuth,
-            "ViewZen": self.viewing_zenith,
-            "RelativeAzimuth": self.relative_azimuth,
-            "SampleIndex": self.sample_index,
-            "LineIndex": self.line_index,
+            "sun_azimuth": self.sun_azimuth,
+            "sun_zenith": self.sun_zenith,
+            "view_azimuth": self.view_azimuth,
+            "view_zenith": self.view_zenith,
+            "relative_azimuth": self.relative_azimuth,
+            "sample_index": self.sample_index,
+            "line_index": self.line_index,
         }
 
         for var in tqdm(geom, desc="Writing geometry"):

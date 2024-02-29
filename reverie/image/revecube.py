@@ -219,9 +219,9 @@ class ReveCube(ABC):
         self.central_lon_local_timezone = None
 
         # Geometric attributes
-        self.solar_zenith = None
-        self.solar_azimuth = None
-        self.viewing_zenith = None
+        self.sun_zenith = None
+        self.sun_azimuth = None
+        self.view_zenith = None
         self.view_azimuth = None
         self.relative_azimuth = None
 
@@ -333,18 +333,18 @@ class ReveCube(ABC):
 
         Returns
         -------
-        solar_zenith: spatially resolved solar zenith [degree]
-        solar_azimuth: spatially resolved solar azimuth [degree]
+        sun_zenith: spatially resolved solar zenith [degree]
+        sun_azimuth: spatially resolved solar azimuth [degree]
         """
 
         utc_offset = self.acq_time_local.utcoffset().total_seconds() / 3600
 
-        self.solar_zenith, self.solar_azimuth = astronomy.sun_geom_noaa(
+        self.sun_zenith, self.sun_azimuth = astronomy.sun_geom_noaa(
             self.acq_time_local, utc_offset, self.lat_grid, self.lon_grid
         )
 
-        self.solar_zenith[~self.get_valid_mask()] = np.nan
-        self.solar_azimuth[~self.get_valid_mask()] = np.nan
+        self.sun_zenith[~self.get_valid_mask()] = np.nan
+        self.sun_azimuth[~self.get_valid_mask()] = np.nan
 
     def get_valid_mask(self, tile: Tile = None):
         """
@@ -385,7 +385,7 @@ class ReveCube(ABC):
         calculate relative azimuth angle
         :return:
         """
-        self.relative_azimuth = np.abs(self.view_azimuth - self.solar_azimuth)
+        self.relative_azimuth = np.abs(self.view_azimuth - self.sun_azimuth)
 
     # @abstractmethod
     def cal_view_geom(self):

@@ -123,10 +123,10 @@ class AcoliteNetCDF(ReveCube):
 
         # # Create geometric variables
         # geom = {
-        #     "SolAzm": self.solar_azimuth,
-        #     "SolZen": self.solar_zenith,
+        #     "SolAzm": self.sun_azimuth,
+        #     "SolZen": self.sun_zenith,
         #     "ViewAzm": self.view_azimuth,
-        #     "ViewZen": self.viewing_zenith,
+        #     "ViewZen": self.view_zenith,
         #     "RelativeAzimuth": self.relative_azimuth,
         #     "SampleIndex": self.sample_index,
         # }
