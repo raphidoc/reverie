@@ -255,7 +255,7 @@ def sun_geom_meeus(date_time, obs_latitude):
 
 
 def sun_geom_noaa(date_time, utc_offset, obs_latitude, obs_longitude):
-    """ "calculate the solar zenith and azimuth angles with the NOAA algorithm
+    """ Calculate the solar zenith and azimuth angles with the NOAA algorithm
     Parameters
     ----------
     date_time: datetime

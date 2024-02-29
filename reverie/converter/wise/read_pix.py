@@ -374,13 +374,13 @@ class Pix(ReveCube):
 
         # Create geometric variables
         geom = {
-            "SolAzi": self.solar_azimuth,
-            "SolZen": self.solar_zenith,
-            "ViewAzi": self.view_azimuth,
-            "ViewZen": self.viewing_zenith,
-            "RelativeAzimuth": self.relative_azimuth,
-            "SampleIndex": self.sample_index,
-            "LineIndex": self.line_index,
+            "sun_azimuth": self.solar_azimuth,
+            "sun_zenith": self.solar_zenith,
+            "view_azimuth": self.view_azimuth,
+            "viewing_zenith": self.viewing_zenith,
+            "relative_azimuth": self.relative_azimuth,
+            "sample_index": self.sample_index,
+            "line_index": self.line_index,
         }
 
         for var in tqdm(geom, desc="Writing geometry"):

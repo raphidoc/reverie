@@ -19,6 +19,6 @@ def test_sun_geom_noaa():
     assert astronomy.sun_geom_noaa(
         date_time, time_zone, obs_latitude, obs_longitude
     ) == (
-        267.0648595143452,
         70.1264503568939,
+        267.0648595143452,
     ), "Should be azimuth  ~ 267.0648595143452 and zenith ~ 70.1264503568939"
