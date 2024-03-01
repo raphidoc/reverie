@@ -586,8 +586,8 @@ class ReveCube(ABC):
         data_var.standard_name = std_name
         # data_var.long_name = ''
 
-        # self.__dst.variables['Rrs'].valid_min = 0
-        # self.__dst.variables['Rrs'].valid_max = 6000
+        # self.__dst.variables['rho_remote_sensing'].valid_min = 0
+        # self.__dst.variables['rho_remote_sensing'].valid_max = 6000
         data_var.missing_value = self.no_data
 
         """
@@ -741,7 +741,7 @@ class ReveCube(ABC):
             #     opts.Overlay(show_legend=False),
             # )
             #
-            # ds = hv.Dataset(data_sel, vdims=["Lt"])
+            # ds = hv.Dataset(data_sel, vdims=["radiance_at_sensor"])
             #
             # plot = ds.to(hv.Image, kdims=["x", "y"], dynamic=True).hist()
             #
@@ -755,7 +755,7 @@ class ReveCube(ABC):
             # import matplotlib.pyplot as plt
             # import cartopy.crs as ccrs
             #
-            # p = data_sel.sel(W=443, method="nearest").Lt.plot(
+            # p = data_sel.sel(W=443, method="nearest").radiance_at_sensor.plot(
             #     subplot_kws=dict(
             #         projection=ccrs.Orthographic(-80, 35), facecolor="gray"
             #     ),
@@ -771,7 +771,7 @@ class ReveCube(ABC):
             # temp_pixex_df = temp_pixex_df.rename_axis("Wavelength")
             # temp_pixex_df = temp_pixex_df.reset_index()
             # TODO output a wide format when wavelength and non wavelength data are mixed
-            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='Lt')
+            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='radiance_at_sensor')
             temp_pixex_df["uuid"] = uuid
             # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
             # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)

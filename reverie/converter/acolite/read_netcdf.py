@@ -101,7 +101,7 @@ class AcoliteNetCDF(ReveCube):
         # Create radiometric variable
         # ACOLITE doesn't use a scale factor
         self.create_var_nc(
-            var="rhow",
+            var="rho_w",
             datatype="f4",
             dimensions=(
                 "W",
@@ -119,7 +119,7 @@ class AcoliteNetCDF(ReveCube):
             # we need to round the value as the conversion to list appear to modify it
             wave_ix = np.where(self.out_ds.variables["W"][:].data == wavelength)[0][0]
             # Could also just assume the order is correct and use the index of the variable
-            self.out_ds.variables["rhow"][wave_ix, :, :] = data
+            self.out_ds.variables["rho_w"][wave_ix, :, :] = data
 
         # # Create geometric variables
         # geom = {

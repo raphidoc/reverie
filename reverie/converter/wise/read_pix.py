@@ -294,13 +294,13 @@ class Pix(ReveCube):
 
         band_temp = self.src_ds.GetRasterBand(bandindex + 1)
         if tile:
-            Lt = band_temp.ReadAsArray(
+            radiance_at_sensor = band_temp.ReadAsArray(
                 xoff=tile[2], yoff=tile[0], win_xsize=tile.xsize, win_ysize=tile.ysize
             )
         else:
-            Lt = band_temp.ReadAsArray()
+            radiance_at_sensor = band_temp.ReadAsArray()
 
-        return Lt
+        return radiance_at_sensor
 
     def get_valid_mask(self, tile: Tile = None):
         """
@@ -324,8 +324,8 @@ class Pix(ReveCube):
             # TODO: Problem when the band read is flag in as bbl (bad band list),
             #   the mask contains only False. Should filter out the bbl bands.
             iband = 10
-            Lt = self.read_band(iband)
-            self._valid_mask = Lt > 0
+            radiance_at_sensor = self.read_band(iband)
+            self._valid_mask = radiance_at_sensor > 0
 
     def to_reve_nc(self, out_file: str = None):
         """
@@ -343,7 +343,7 @@ class Pix(ReveCube):
 
         # Create radiometric variable
         self.create_var_nc(
-            var="Lt",
+            var="radiance_at_sensor",
             datatype="i4",
             dimensions=(
                 "wavelength",
@@ -370,7 +370,7 @@ class Pix(ReveCube):
             """
             data[data == 0] = self.no_data * self.scale_factor
 
-            self.out_ds.variables["Lt"][band, :, :] = data
+            self.out_ds.variables["radiance_at_sensor"][band, :, :] = data
 
         # Create geometric variables
         geom = {
@@ -605,8 +605,8 @@ class Pix(ReveCube):
         # Create radiometric variable
         # chunk size is set to 1 wavelength to allow for parallel computation and I/O
         # size along the spatial dimensions should be optimized for the available memory
-        Lt = root_grp.create(
-            "Lt",
+        radiance_at_sensor = root_grp.create(
+            "radiance_at_sensor",
             shape=(self.n_bands, self.n_rows, self.n_cols),
             chunks=(1, 500, 500),
             dtype="<f4",
@@ -615,18 +615,18 @@ class Pix(ReveCube):
             compressor=compressor,
         )
 
-        Lt.attrs["_ARRAY_DIMENSIONS"] = ["wavelength", "y", "x"]
+        radiance_at_sensor.attrs["_ARRAY_DIMENSIONS"] = ["wavelength", "y", "x"]
 
-        Lt.attrs["grid_mapping"] = "grid_mapping"  # self.proj_var.name
-        Lt.attrs["_CRS"] = {
+        radiance_at_sensor.attrs["grid_mapping"] = "grid_mapping"  # self.proj_var.name
+        radiance_at_sensor.attrs["_CRS"] = {
             "url": "http://www.opengis.net/def/crs/EPSG/0/" + str(crs.to_epsg()),
             "wkt": crs.to_wkt(),
         }
 
         # Follow the standard name table CF convention
-        std_name, std_unit = get_cf_std_name(alias="Lt")
-        Lt.attrs["units"] = std_unit
-        Lt.attrs["standard_name"] = std_name
+        std_name, std_unit = get_cf_std_name(alias="radiance_at_sensor")
+        radiance_at_sensor.attrs["units"] = std_unit
+        radiance_at_sensor.attrs["standard_name"] = std_name
 
         # self.n_bands = 1
         for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
@@ -640,7 +640,7 @@ class Pix(ReveCube):
 
             # filters[0].encode(data).max()
 
-            Lt[
+            radiance_at_sensor[
                 band, :, :
             ] = data  # filters[0].encode(data).reshape(self.n_rows, self.n_cols)
 

@@ -12,7 +12,7 @@ The xml table could be parsed for automatic retrieval of standard names, but thi
 # import defusedxml.ElementTree as ET
 
 
-def get_cf_std_name(url=None, alias: str = "Lt"):
+def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
     std_name = None
     std_unit = None
 
@@ -22,21 +22,21 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     #     std_unit = ''
 
     # Radiometric quantities
-    if alias in ["Lt"]:
+    if alias in ["radiance_at_sensor"]:
         std_name = "upwelling_radiance_per_unit_wavelength_in_air"
         std_unit = "uW cm-2 nm-1 sr-1"
 
     # No standard
-    if alias in ["rhot"]:
+    if alias in ["rho_at_sensor"]:
         std_name = "at_sensor_reflectance"
         std_unit = "1"
 
     # No standard
-    if alias in ["rhow"]:
+    if alias in ["rho_w"]:
         std_name = "water_leaving_reflectance"
         std_unit = "1"
 
-    if alias in ["Rrs"]:
+    if alias in ["rho_remote_sensing"]:
         std_name = "surface_ratio_of_upwelling_radiance_emerging_from_sea_water_to_downwelling_radiative_flux_in_air"
         std_unit = "sr-1"
 
