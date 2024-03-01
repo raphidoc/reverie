@@ -12,7 +12,7 @@ The xml table could be parsed for automatic retrieval of standard names, but thi
 # import defusedxml.ElementTree as ET
 
 
-def get_cf_std_name(url=None, alias: str = "Lt"):
+def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
     std_name = None
     std_unit = None
 
@@ -22,21 +22,21 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     #     std_unit = ''
 
     # Radiometric quantities
-    if alias in ["Lt"]:
+    if alias in ["radiance_at_sensor"]:
         std_name = "upwelling_radiance_per_unit_wavelength_in_air"
         std_unit = "uW cm-2 nm-1 sr-1"
 
     # No standard
-    if alias in ["rhot"]:
+    if alias in ["rho_at_sensor"]:
         std_name = "at_sensor_reflectance"
         std_unit = "1"
 
     # No standard
-    if alias in ["rhow"]:
+    if alias in ["rho_w"]:
         std_name = "water_leaving_reflectance"
         std_unit = "1"
 
-    if alias in ["Rrs"]:
+    if alias in ["rho_remote_sensing"]:
         std_name = "surface_ratio_of_upwelling_radiance_emerging_from_sea_water_to_downwelling_radiative_flux_in_air"
         std_unit = "sr-1"
 
@@ -54,34 +54,34 @@ def get_cf_std_name(url=None, alias: str = "Lt"):
     # Relative azimuth angle = angle_of_rotation_from_solar_azimuth_to_platform_azimuth [degree]
     # platform_azimuth_angle / sensor_azimuth_angle / relative_platform_azimuth_angle / relative_sensor_azimuth_angle ?
 
-    if alias in ["SolZen"]:
+    if alias in ["sun_zenith"]:
         std_name = "solar_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["SolAzi"]:
+    if alias in ["sun_azimuth"]:
         std_name = "solar_azimuth_angle"
         std_unit = "degree"
 
-    if alias in ["ViewZen"]:
+    if alias in ["view_zenith"]:
         std_name = "sensor_zenith_angle"
         std_unit = "degree"
 
-    if alias in ["ViewAzi"]:
+    if alias in ["view_azimuth"]:
         std_name = "sensor_azimuth_angle"
         std_unit = "degree"
 
-    if alias in ["RelativeAzimuth"]:
+    if alias in ["relative_azimuth"]:
         # Should be: angle_of_rotation_from_solar_azimuth_to_sensor_azimuth
         std_name = "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
         std_unit = "degree"
 
     # No standard
-    if alias in ["SampleIndex"]:
+    if alias in ["sample_index"]:
         std_name = "sensor_array_index_of_across_track_samples) "
         std_unit = ""
 
     # No standard
-    if alias in ["LineIndex"]:
+    if alias in ["line_index"]:
         std_name = "index_of_along_track_acquisition_line) "
         std_unit = ""
 

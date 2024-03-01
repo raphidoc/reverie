@@ -220,9 +220,9 @@ class ReveCube(ABC):
         self.central_lon_local_timezone = None
 
         # Geometric attributes
-        self.solar_zenith = None
-        self.solar_azimuth = None
-        self.viewing_zenith = None
+        self.sun_zenith = None
+        self.sun_azimuth = None
+        self.view_zenith = None
         self.view_azimuth = None
         self.relative_azimuth = None
 
@@ -336,28 +336,20 @@ class ReveCube(ABC):
 
         Returns
         -------
-        solar_zenith: spatially resolved solar zenith [degree]
-        solar_azimuth: spatially resolved solar azimuth [degree]
+        sun_zenith: spatially resolved solar zenith [degree]
+        sun_azimuth: spatially resolved solar azimuth [degree]
         """
 
         logging.debug('calculating solar zenith and azimuth')
 
         utc_offset = self.acq_time_local.utcoffset().total_seconds() / 3600
 
-        central_lat = float(self.lat[round(len(self.lat)/2)])
-        central_lon = float(self.lon[round(len(self.lon)/2)])
-
-        solar_zenith, solar_azimuth = astronomy.sun_geom_noaa(
-            self.acq_time_local, utc_offset, central_lat, central_lon
+        self.sun_zenith, self.sun_azimuth = astronomy.sun_geom_noaa(
+            self.acq_time_local, utc_offset, self.lat_grid, self.lon_grid
         )
 
-        self.solar_zenith = np.full((self.n_rows, self.n_cols), solar_zenith)
-        self.solar_azimuth = np.full((self.n_rows, self.n_cols), solar_azimuth)
-
-        logging.debug('masking sun geometry with valid mask')
-
-        self.solar_zenith[~self.get_valid_mask()] = np.nan
-        self.solar_azimuth[~self.get_valid_mask()] = np.nan
+        self.sun_zenith[~self.get_valid_mask()] = np.nan
+        self.sun_azimuth[~self.get_valid_mask()] = np.nan
 
     def get_valid_mask(self, tile: Tile = None):
         """
@@ -400,7 +392,7 @@ class ReveCube(ABC):
         calculate relative azimuth angle
         :return:
         """
-        self.relative_azimuth = np.abs(self.view_azimuth - self.solar_azimuth)
+        self.relative_azimuth = np.abs(self.view_azimuth - self.sun_azimuth)
 
     # @abstractmethod
     def cal_view_geom(self):
@@ -601,8 +593,8 @@ class ReveCube(ABC):
         data_var.standard_name = std_name
         # data_var.long_name = ''
 
-        # self.__dst.variables['Rrs'].valid_min = 0
-        # self.__dst.variables['Rrs'].valid_max = 6000
+        # self.__dst.variables['rho_remote_sensing'].valid_min = 0
+        # self.__dst.variables['rho_remote_sensing'].valid_max = 6000
         data_var.missing_value = self.no_data
 
         """
@@ -756,7 +748,7 @@ class ReveCube(ABC):
             #     opts.Overlay(show_legend=False),
             # )
             #
-            # ds = hv.Dataset(data_sel, vdims=["Lt"])
+            # ds = hv.Dataset(data_sel, vdims=["radiance_at_sensor"])
             #
             # plot = ds.to(hv.Image, kdims=["x", "y"], dynamic=True).hist()
             #
@@ -770,7 +762,7 @@ class ReveCube(ABC):
             # import matplotlib.pyplot as plt
             # import cartopy.crs as ccrs
             #
-            # p = data_sel.sel(W=443, method="nearest").Lt.plot(
+            # p = data_sel.sel(W=443, method="nearest").radiance_at_sensor.plot(
             #     subplot_kws=dict(
             #         projection=ccrs.Orthographic(-80, 35), facecolor="gray"
             #     ),
@@ -786,7 +778,7 @@ class ReveCube(ABC):
             # temp_pixex_df = temp_pixex_df.rename_axis("Wavelength")
             # temp_pixex_df = temp_pixex_df.reset_index()
             # TODO output a wide format when wavelength and non wavelength data are mixed
-            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='Lt')
+            # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='radiance_at_sensor')
             temp_pixex_df["uuid"] = uuid
             # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
             # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)
