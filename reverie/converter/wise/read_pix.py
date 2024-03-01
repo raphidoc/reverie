@@ -14,6 +14,7 @@ from p_tqdm import p_uimap
 import xarray as xr
 import zarr
 import numcodecs
+import logging
 
 
 # REVERIE import
@@ -66,13 +67,13 @@ class Pix(ReveCube):
         self.pix_f = os.path.join(pix_dir, pix_f)
 
         if not os.path.isfile(self.hdr_f) or not os.path.isfile(self.pix_f):
-            print(f"error: {self.hdr_f} or {self.pix_f} does not exist")
+            raise ValueError(f"{self.hdr_f} or {self.pix_f} does not exist")
 
         self.image_name = [re.findall(r".*(?=-L|-N)", file) for file in files][0][0]
 
         # Open the .pix file with GDAL
         self.src_ds = gdal.Open(self.pix_f)
-        print(f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}")
+        logging.info(f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}")
 
         # Parse ENVI header
         self.header = helper.read_envi_hdr(hdr_f=self.hdr_f)
@@ -114,7 +115,7 @@ class Pix(ReveCube):
         unit_res = {
             key: val for key, val in self.header.items() if re.search(f"unit", key)
         }
-        print(f"Found unit: {unit_res}\nHard coded unit is: {self.unit}")
+        logging.info(f"Found unit: {unit_res}\nHard coded unit is: {self.unit}")
         #
         # if len(res) == 0:
         #     print("No unit found in the header you should probably: 1. yell of despair and 2. Try your best guess and contact someone :)")
@@ -132,14 +133,14 @@ class Pix(ReveCube):
         reciprocal of it.
         """
         scale_factor = [val for key, val in self.header.items() if "scale" in key][0]
-        print(f"Read scale factor as: {scale_factor}")
+        logging.info(f"Read scale factor as: {scale_factor}")
         try:
             scale_factor = int(scale_factor)
             self.scale_factor = np.reciprocal(float(scale_factor))
         except ValueError as e:
             print(e)
             self.scale_factor = float(scale_factor)
-        print(f"Converted scale factor as: {self.scale_factor}")
+        logging.info(f"Converted scale factor as: {self.scale_factor}")
         ignore_value = self.header["data ignore value"]
         if ignore_value == "":
             self.no_data = -99999
@@ -163,7 +164,7 @@ class Pix(ReveCube):
             or not os.path.isfile(self.glu_f)
             or not os.path.isfile(self.nav_f)
         ):
-            print(
+            logging.warning(
                 "Navigation data or geo correction missing, cannot compute viewing geometry."
             )
             self.flightline = None
@@ -206,7 +207,7 @@ class Pix(ReveCube):
         self.cal_relative_azimuth()
         t1 = time.perf_counter()
 
-        print(
+        logging.info(
             f"ReveCube initiated from class {self.__class__.__name__} in {t1-t0:.2f}s"
         )
 
@@ -217,6 +218,8 @@ class Pix(ReveCube):
         so, we need to transfer the original viewing geometry to the georefernce grid using the georeference LUT
         :return:
         """
+        logging.debug('Calculating viewing geometry from glu files')
+
         if self.flightline is None:
             raise Exception("no flight line found")
 

@@ -1,4 +1,5 @@
 # Standard library imports
+import logging
 import os
 from abc import ABC
 import datetime
@@ -169,7 +170,7 @@ class ReveCube(ABC):
         in_path: str,
         in_ds: xr.Dataset,
         wavelength: np.ndarray,
-        acq_time_z,
+        acq_time_z: datetime.datetime,
         z: float,
         y: np.ndarray,
         x: np.ndarray,
@@ -258,6 +259,8 @@ class ReveCube(ABC):
         center_longitude:
         center_latitude:
         """
+        logging.debug('calculating pixel coordinates')
+
         # Define image projected coordinates from affine tranformation
         x, y = helper.transform_xy(
             affine, rows=list(range(n_rows)), cols=list(range(n_cols))
@@ -275,8 +278,8 @@ class ReveCube(ABC):
         lat = lat[:, 0]
 
         # print(f"lat shape: {lat.shape}, lon shape: {lon.shape}")
-        print(
-            f"n_rows({n_rows}) = y({len(y)}) = lat({len(lat)})\r\nn_cols({n_cols}) = x({len(x)}) = lon({len(lon)})"
+        logging.info(
+            f"n_rows({n_rows}) = y({len(y)}) = lat({len(lat)}) and n_cols({n_cols}) = x({len(x)}) = lon({len(lon)})"
         )
 
         self.x, self.y, self.lon, self.lat = (x, y, lon, lat)
@@ -314,14 +317,14 @@ class ReveCube(ABC):
         tz = helper.findLocalTimeZone(central_lon, central_lat)
 
         self.acq_time_local = tz.convert(self.acq_time_z)
-        print(
+        logging.info(
             f"acquired UTC time:{self.acq_time_z}, and local time：{self.acq_time_local}"
         )
 
         offset_hours = self.acq_time_local.utcoffset().total_seconds() / 3600
 
         self.central_lon_local_timezone = offset_hours * 15
-        print(f"central longitude of {tz}:{self.central_lon_local_timezone}")
+        logging.info(f"central longitude of {tz}:{self.central_lon_local_timezone}")
 
     def cal_sun_geom(self):
         """ calculate solar zenith and azimuth angle for each pixel in the scene
@@ -337,11 +340,21 @@ class ReveCube(ABC):
         solar_azimuth: spatially resolved solar azimuth [degree]
         """
 
+        logging.debug('calculating solar zenith and azimuth')
+
         utc_offset = self.acq_time_local.utcoffset().total_seconds() / 3600
 
-        self.solar_zenith, self.solar_azimuth = astronomy.sun_geom_noaa(
-            self.acq_time_local, utc_offset, self.lat_grid, self.lon_grid
+        central_lat = float(self.lat[round(len(self.lat)/2)])
+        central_lon = float(self.lon[round(len(self.lon)/2)])
+
+        solar_zenith, solar_azimuth = astronomy.sun_geom_noaa(
+            self.acq_time_local, utc_offset, central_lat, central_lon
         )
+
+        self.solar_zenith = np.full((self.n_rows, self.n_cols), solar_zenith)
+        self.solar_azimuth = np.full((self.n_rows, self.n_cols), solar_azimuth)
+
+        logging.debug('masking sun geometry with valid mask')
 
         self.solar_zenith[~self.get_valid_mask()] = np.nan
         self.solar_azimuth[~self.get_valid_mask()] = np.nan
@@ -352,6 +365,7 @@ class ReveCube(ABC):
         :param tile: an object of class tile.Tile()
         :return:[]
         """
+        logging.debug('geting valid mask')
         if self._valid_mask is None:
             self.cal_valid_mask()
         if tile is None:
@@ -364,6 +378,7 @@ class ReveCube(ABC):
         Calculate the mask of valid pixel for the entire image (!= nodata)
         :return: _valid_mask
         """
+        logging.debug('calculating valid mask')
         if self._valid_mask is None:
             # Select the first variable with dim (wavelength, y, x) to compute the valid mask
             for name, data in self.in_ds.data_vars.items():

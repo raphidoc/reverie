@@ -1,4 +1,5 @@
 from reverie.image.revecube import ReveCube
+import logging
 
 # From ACOLITE
 # # update version info
@@ -26,3 +27,5 @@ from reverie.image.revecube import ReveCube
 #         if 'FETCH_HEAD' in gd:
 #             version_long+=' pull {}'.format(gd['FETCH_HEAD'])
 #             version = 'Generic GitHub Clone p{}'.format(gd['FETCH_HEAD'])
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
