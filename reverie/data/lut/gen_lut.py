@@ -200,7 +200,7 @@ def run_gaseous_sim(params: list):
         ]
     )
 
-    exec_6sv2 = "/home/raphael/PycharmProjects/6sV2.1/sixsV2.1"
+    exec_6sv2 = "/home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"
     process = subprocess.run(exec_6sv2, input=input_str, text=True, capture_output=True)
 
     # process.stderr
