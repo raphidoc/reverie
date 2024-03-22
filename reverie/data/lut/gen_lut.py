@@ -244,9 +244,10 @@ if __name__ == "__main__":
     target_pres_dim = [750.0, 1013.0, 1100]  # mbar
     # Sensor altitude at -1000 is used by 6S to indicate satellite altitude
     sensor_alt_dim = [
+        -0.5
         -1,
         -3,
-        -1000,
+        -4
     ]  # km
     # These are the 20 node wavelengths used by 6S
     wavelength_dim = [

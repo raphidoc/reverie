@@ -345,7 +345,7 @@ C*******INTERNAL FLAG*********
 c***********************************************************************
 c                             return to 6s
 c***********************************************************************
-c TODO: This seems to be the 20 node wavelength on wich sixs actually run and latter interpolate
+c TODO: This seems to be the 20 discrete wavelength on wich sixs actually run and latter interpolate
       data wldisc /0.350,0.400,0.412,0.443,0.470,0.488,0.515,0.550,
      s             0.590,0.633,0.670,0.694,0.760,0.860,1.240,1.536,
      s             1.650,1.950,2.250,3.750/
@@ -1322,7 +1322,7 @@ c**********************************************************************c
        s(l)=1.
    38 continue
 
-C      write(*,*) iwave
+c      write(*,*) iwave
       read(iread,*) iwave
 
       if (iwave.eq.-2) goto 1600
@@ -2615,12 +2615,12 @@ c**********************************************************************c
 ! write(iwr, 103)month,jday
 !     endif
 !     if(igeom.ne.0) write(iwr, 101)month,jday,tu,xlat,xlon
-      write(*, *)'"solar_zenith_[degree]":',asol, ','
-      write(*, *)'"solar_azimuth_[degree]":',phi0, ','
-      write(*, *)'"view_zenith_[degree]":',avis, ','
-      write(*, *)'"view_azimuth_[degree]":',phiv, ','
-      write(*, *)'"scattering_angle_[degree]":',adif, ','
-      write(*, *)'"relative_azimuth_[degree]":',phi, ','
+      write(*, *)'"solar_zenith_[degree]":"',asol, '",'
+      write(*, *)'"solar_azimuth_[degree]":"',phi0, '",'
+      write(*, *)'"view_zenith_[degree]":"',avis, '",'
+      write(*, *)'"view_azimuth_[degree]":"',phiv, '",'
+      write(*, *)'"scattering_angle_[degree]":"',adif, '",'
+      write(*, *)'"relative_azimuth_[degree]":"',phi, '",'
 !
 ! --- atmospheric model ----
 !      write(iwr, 1119)
@@ -2630,14 +2630,14 @@ c**********************************************************************c
 !f the result is greater than zero, it will go to line 228.
       write(*, *)'"idatm":',idatm, ','
       if(idatm-7)226,227,228
-  228 write(*, *)'"concentration_H2O_[g cm-2]":',uw,',','"concentration_O3_[cm-atm]":',uo3, ','
+  228 write(*, *)'"concentration_H2O_[g cm-2]":"',uw,'",','"concentration_O3_[cm-atm]":"',uo3, '",'
 !      goto 219
-  227 write(iwr, 1272)
+  227 continue !write(iwr, 1272)
       do 229 i=1,34
-        write(*, *)z(i),p(i),t(i),wh(i),wo(i)
+        continue !write(*, *)z(i),p(i),t(i),wh(i),wo(i)
   229 continue
 !      goto 219
-  226 write(*, *)'"atmospheric_model":"',atmid(idatm+1),'",'
+  226 continue !write(*, *)'"atmospheric_model":',atmid(idatm+1),','
 !
 ! --- aerosols model (type) ----
  !19    write(iwr,5550)
@@ -2681,9 +2681,9 @@ c**********************************************************************c
        aer_model(7)="Stratospheric aerosol model"
        aer_model(11)="Sun Photometer aerosol model"
 
-      if (iaer.ge.1.and.iaer.lt.4) write (*,*)'"aerosol_model":',aer_model(iaer), ','
-      if (iaer.ge.5.and.iaer.le.7) write (*,*)'"aerosol_model":',aer_model(iaer), ','
-      if (iaer.eq.11) write(*,*)'"aerosol_model":',aer_model(iaer), ','
+      if (iaer.ge.1.and.iaer.lt.4) write (*,*)'"aerosol_model":"',aer_model(iaer), '",'
+      if (iaer.ge.5.and.iaer.le.7) write (*,*)'"aerosol_model":"',aer_model(iaer), '",'
+      if (iaer.eq.11) write(*,*)'"aerosol_model":"',aer_model(iaer), '",'
 
       endif
 !
@@ -2702,14 +2702,14 @@ c**********************************************************************c
 !! --- aerosol model (concentration) ----
 ! --- for the exponential profile ----
       if (iaer_prof.eq.0) then
-      if(abs(v).le.xacc) write(*,*)'"aot_550_[nm]":',taer55, ','
-      if(abs(v).gt.xacc) write(*,*)'"visibility_[km]":',v,',','"aot_550_[nm]":',taer55, ','
+      if(abs(v).le.xacc) write(*,*)'"aot_550_[nm]":"',taer55, '",'
+      if(abs(v).gt.xacc) write(*,*)'"visibility_[km]":"',v,'",','"aot_550_[nm]":"',taer55, '",'
       endif
 !1112  write(6,5555)
 !!! --- spectral condition ----
-      write(*, *)'"iwave":',iwave, ','
+      write(*, *)'"iwave":"',iwave, '",'
 !     if(iwave.eq.-2) write(iwr, 1510) nsat(1),wlinf,wlsup
-      if(iwave.eq.-1) write(*, *)'"monochromatic_wavelength_[um]":',wl, ','
+      if(iwave.eq.-1) write(*, *)'"monochromatic_wavelength_[um]":"',wl, '",'
 !     if(iwave.ge.0) write(iwr, 1510) nsat(iwave+1), wlinf,wlsup
 !! ---- atmospheric polarization requested
 !     if (ipol.ne.0)then
@@ -2722,7 +2722,7 @@ c**********************************************************************c
 !     endif
 !
 ! --- ground reflectance (type and spectral variation) ----
-      write(*, *)'"inhomo":',inhomo, ','
+      write(*, *)'"inhomo":"',inhomo, '",'
 !     if(idirec.eq.0) then
 !       rocave=0.
 !       roeave=0.
@@ -2759,7 +2759,7 @@ c**********************************************************************c
 ! 260   write(iwr, 168)
   261   if (igroun.gt.0)write(iwr, reflec(igroun+3))ro
 !       if (igroun.gt.0)goto 158
-        if(igroun.eq.-1) write(iwr, reflec(1))'"user_defined_spectral_reflectance":',ro, ','
+        if(igroun.eq.-1) write(iwr, reflec(1))'"user_defined_spectral_reflectance":"',ro, '",'
 !       if(igroun.eq.-1) goto 158
 !       if(iwave.eq.-1)  write(iwr, reflec(2))ro
 !       if(iwave.ne.-1)  write(iwr, reflec(3))ro
@@ -2868,19 +2868,19 @@ c**********************************************************************c
 ! 50  continue
 !! --- pressure at ground level (174) and altitude (175) ----
 ! 999 write(iwr, 173)
-      write(*, *)'"ground_pressure_[mb]":',p(1), ','
-      write(*, *)'"ground_altitude_[km]":',xps, ','
+      write(*, *)'"ground_pressure_[mb]":"',p(1), '",'
+      write(*, *)'"ground_altitude_[km]":"',xps, '",'
 !     if (xps.gt.0..and.idatm.ne.0) write(iwr, 176)uw,uo3
 !
 ! --- plane simulation output if selected ----
       if (palt.lt.1000.) then
 !      write(iwr, 178)
-       write(*, *)'"plane_pressure_[mb]":',pps, ','
-       write(*, *)'"plane_altitude_[km]":',zpl(34), ','
+       write(*, *)'"plane_pressure_[mb]":"',pps, '",'
+       write(*, *)'"plane_altitude_[km]":"',zpl(34), '",'
 !      write(iwr, 181)
-       write(*, *)'"concentration_O3_[cm-atm]":',puo3, ','
-       write(*, *)'"concentration_H2O_[g cm-2]":',puw, ','
-       write(*, *)'"aot_550_[nm]":',taer55p, ','
+       write(*, *)'"concentration_O3_[cm-atm]":"',puo3, '",'
+       write(*, *)'"concentration_H2O_[g cm-2]":"',puw, '",'
+       write(*, *)'"aot_550_[nm]":"',taer55p, '",'
       endif
 !
 ! ---- atmospheric correction  ----
@@ -3554,25 +3554,25 @@ C j=1,2,3 are the components: atmospheric, background, pixel
 !    s		(ainr(1,j),j=1,3)
 !         write(iwr, 434)(aini(2,j),j=1,3),'background ','pixel ',
 !    s         (ainr(2,j),j=1,3)
-            write(*, *)'"percent_of_direct_solar_irradiance_at_target":', aini(1,1), ','
-            write(*, *)'"percent_of_diffuse_atmospheric_irradiance_at_target":', aini(1,2), ','
-            write(*, *)'"percent_of_environement_irradiance_at_target":', aini(1,3), ','
-            write(*, *)'"atmospheric_reflectance_at_sensor":', ainr(1,1), ','
-            write(*, *)'"background_reflectance_at_sensor":', ainr(1,2), ','
-            write(*, *)'"pixel_reflectance_at_sensor":', ainr(1,3), ','
+            write(*, *)'"percent_of_direct_solar_irradiance_at_target":"', aini(1,1), '",'
+            write(*, *)'"percent_of_diffuse_atmospheric_irradiance_at_target":"', aini(1,2), '",'
+            write(*, *)'"percent_of_environement_irradiance_at_target":"', aini(1,3), '",'
+            write(*, *)'"atmospheric_reflectance_at_sensor":"', ainr(1,1), '",'
+            write(*, *)'"background_reflectance_at_sensor":"', ainr(1,2), '",'
+            write(*, *)'"pixel_reflectance_at_sensor":"', ainr(1,3), '",'
 
-            write(*, *)'"direct_solar_irradiance_at_target_[W m-2 um-1]":', aini(2,1), ','
-            write(*, *)'"diffuse_atmospheric_irradiance_at_target_[W m-2 um-1]":', aini(2,2), ','
-            write(*, *)'"environement_irradiance_at_target_[W m-2 um-1]":', aini(2,3), ','
-            write(*, *)'"atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]":', ainr(2,1), ','
-            write(*, *)'"background_radiance_at_sensor_[W m-2 sr-1 um-1]":', ainr(2,2), ','
-            write(*, *)'"pixel_radiance_at_sensor_[W m-2 sr-1 um-1]":', ainr(2,3), ','
+            write(*, *)'"direct_solar_irradiance_at_target_[W m-2 um-1]":"', aini(2,1), '",'
+            write(*, *)'"diffuse_atmospheric_irradiance_at_target_[W m-2 um-1]":"', aini(2,2), '",'
+            write(*, *)'"environement_irradiance_at_target_[W m-2 um-1]":"', aini(2,3), '",'
+            write(*, *)'"atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]":"', ainr(2,1), '",'
+            write(*, *)'"background_radiance_at_sensor_[W m-2 sr-1 um-1]":"', ainr(2,2), '",'
+            write(*, *)'"pixel_radiance_at_sensor_[W m-2 sr-1 um-1]":"', ainr(2,3), '",'
         endif
       
       if (iwave.eq.-1)then
-        write(*, *)'"F0_[W m-2 um-1]":',seb, ','
+        write(*, *)'"F0_[W m-2 um-1]":"',seb, '",'
       else
-        write(*,*)'"integraction_function_[um]":',sb,',','"F0_[W m-2 um-1]":',seb, ','
+        write(*,*)'"integration_function_[um]":"',sb,'",','"F0_[W m-2 um-1]":"',seb, '",'
       endif
 
 c**********************************************************************c
@@ -3582,98 +3582,98 @@ c                                                                      c
 c**********************************************************************c
 !     write(iwr, 929)
 !     write(iwr, 930)
-      write(*, *)'"global_gas_trans_downward":',dgasm,','
-      write(*, *)'"global_gas_trans_upward":',ugasm,','
-      write(*, *)'"global_gas_trans_total":',tgasm,','
-      write(*, *)'"water_gas_trans_downward":',sdwava,','
-      write(*, *)'"water_gas_trans_upward":',suwava,','
-      write(*, *)'"water_gas_trans_total":',stwava,','
-      write(*, *)'"ozone_gas_trans_downward":',sdozon,','
-      write(*, *)'"ozone_gas_trans_upward":',suozon,','
-      write(*, *)'"ozone_gas_trans_total":',stozon,','
-      write(*, *)'"co2_gas_trans_downward":',sddica,','
-      write(*, *)'"co2_gas_trans_upward":',sudica,','
-      write(*, *)'"co2_gas_trans_total":',stdica,','
-      write(*, *)'"oxyg_gas_trans_downward":',sdoxyg,','
-      write(*, *)'"oxyg_gas_trans_upward":',suoxyg,','
-      write(*, *)'"oxyg_gas_trans_total":',stoxyg,','
-      write(*, *)'"no2_gas_trans_downward":',sdniox,','
-      write(*, *)'"no2_gas_trans_upward":',suniox,','
-      write(*, *)'"no2_gas_trans_total":',stniox,','
-      write(*, *)'"ch4_gas_trans_downward":',sdmeth,','
-      write(*, *)'"ch4_gas_trans_upward":',sumeth,','
-      write(*, *)'"ch4_gas_trans_total":',stmeth,','
-      write(*, *)'"co_gas_trans_downward":',sdmoca,','
-      write(*, *)'"co_gas_trans_upward:":',sumoca,','
-      write(*, *)'"co_gas_trans_total":',stmoca,','
+      write(*, *)'"global_gas_trans_downward":"',dgasm,'",'
+      write(*, *)'"global_gas_trans_upward":"',ugasm,'",'
+      write(*, *)'"global_gas_trans_total":"',tgasm,'",'
+      write(*, *)'"water_gas_trans_downward":"',sdwava,'",'
+      write(*, *)'"water_gas_trans_upward":"',suwava,'",'
+      write(*, *)'"water_gas_trans_total":"',stwava,'",'
+      write(*, *)'"ozone_gas_trans_downward":"',sdozon,'",'
+      write(*, *)'"ozone_gas_trans_upward":"',suozon,'",'
+      write(*, *)'"ozone_gas_trans_total":"',stozon,'",'
+      write(*, *)'"co2_gas_trans_downward":"',sddica,'",'
+      write(*, *)'"co2_gas_trans_upward":"',sudica,'",'
+      write(*, *)'"co2_gas_trans_total":"',stdica,'",'
+      write(*, *)'"oxyg_gas_trans_downward":"',sdoxyg,'",'
+      write(*, *)'"oxyg_gas_trans_upward":"',suoxyg,'",'
+      write(*, *)'"oxyg_gas_trans_total":"',stoxyg,'",'
+      write(*, *)'"no2_gas_trans_downward":"',sdniox,'",'
+      write(*, *)'"no2_gas_trans_upward":"',suniox,'",'
+      write(*, *)'"no2_gas_trans_total":"',stniox,'",'
+      write(*, *)'"ch4_gas_trans_downward":"',sdmeth,'",'
+      write(*, *)'"ch4_gas_trans_upward":"',sumeth,'",'
+      write(*, *)'"ch4_gas_trans_total":"',stmeth,'",'
+      write(*, *)'"co_gas_trans_downward":"',sdmoca,'",'
+      write(*, *)'"co_gas_trans_upward:":"',sumoca,'",'
+      write(*, *)'"co_gas_trans_total":"',stmoca,'",'
 !     write(iwr, 1401)
 !     write(iwr, 1401)
 
-      write(*, *)'"rayleigh_scattering_trans_downward":',sdtotr,','
-      write(*, *)'"rayleigh_scattering_trans_downward":',sutotr,','
-      write(*, *)'"rayleigh_scattering_trans_downward":',sutotr*sdtotr,','
-      write(*, *)'"aerosol_scattering_trans":',sdtota,','
-      write(*, *)'"aerosol_scattering_trans":',sutota,','
-      write(*, *)'"aerosol_scattering_trans":',sutota*sdtota,','
-      write(*, *)'"total_scattering_trans":',sdtott,','
-      write(*, *)'"total_scattering_trans":',sutott,','
-      write(*, *)'"total_scattering_trans":',sutott*sdtott,','
+      write(*, *)'"rayleigh_scattering_trans_downward":"',sdtotr,'",'
+      write(*, *)'"rayleigh_scattering_trans_upward":"',sutotr,'",'
+      write(*, *)'"rayleigh_scattering_trans_total":"',sutotr*sdtotr,'",'
+      write(*, *)'"aerosol_scattering_trans_downward":"',sdtota,'",'
+      write(*, *)'"aerosol_scattering_trans_upward":"',sutota,'",'
+      write(*, *)'"aerosol_scattering_trans_total":"',sutota*sdtota,'",'
+      write(*, *)'"total_scattering_trans_downward":"',sdtott,'",'
+      write(*, *)'"total_scattering_trans_upward":"',sutott,'",'
+      write(*, *)'"total_scattering_trans_total":"',sutott*sdtott,'",'
 !     write(iwr, 1401)
 !     write(iwr, 1401)
 !
 !     write(iwr, 939)
-      write(*, *)'"spherical_albedo_rayleigh":',sasr,','
-      write(*, *)'"spherical_albedo_aerosol":',sasa,','
-      write(*, *)'"spherical_albedo_total":',sast,','
-      write(*, *)'"optical_depth_total_rayleigh":',sodray,','
-      write(*, *)'"optical_depth_total_aerosol":',sodaer,','
-      write(*, *)'"optical_depth_total_total":',sodtot,','
-      write(*, *)'"optical_depth_plane_rayleigh":',sodrayp,','
-      write(*, *)'"optical_depth_plane_aerosol":',sodaerp,','
-      write(*, *)'"optical_depth_plane_total":',sodtotp,','
+      write(*, *)'"spherical_albedo_rayleigh":"',sasr,'",'
+      write(*, *)'"spherical_albedo_aerosol":"',sasa,'",'
+      write(*, *)'"spherical_albedo_total":"',sast,'",'
+      write(*, *)'"optical_depth_total_rayleigh":"',sodray,'",'
+      write(*, *)'"optical_depth_total_aerosol":"',sodaer,'",'
+      write(*, *)'"optical_depth_total_total":"',sodtot,'",'
+      write(*, *)'"optical_depth_plane_rayleigh":"',sodrayp,'",'
+      write(*, *)'"optical_depth_plane_aerosol":"',sodaerp,'",'
+      write(*, *)'"optical_depth_plane_total":"',sodtotp,'",'
       if (ipol.eq.0) then
-        write(*, *)'"reflectance_rayleigh":',sroray,','
-        write(*, *)'"reflectance_aerosol":',sroaer,','
-        write(*, *)'"reflectance_total":',srotot,','
-        write(*, *)'"phase function_rayleigh":',fophsr,','
-        write(*, *)'"phase function_aerosol":',fophsa,','
-        write(*, *)'"phase function_total":',fophst,','
+        write(*, *)'"reflectance_rayleigh":"',sroray,'",'
+        write(*, *)'"reflectance_aerosol":"',sroaer,'",'
+        write(*, *)'"reflectance_total":"',srotot,'",'
+        write(*, *)'"phase function_rayleigh":"',fophsr,'",'
+        write(*, *)'"phase function_aerosol":"',fophsa,'",'
+        write(*, *)'"phase function_total":"',fophst,'",'
       else
-        write(*, *)'"reflectance_I_rayleigh":',sroray,','
-        write(*, *)'"reflectance_I_aerosol":',sroaer,','
-        write(*, *)'"reflectance_I_total":',srotot,','
-        write(*, *)'"reflectance_Q_rayleigh":',srqray,','
-        write(*, *)'"reflectance_Q_aerosol":',srqaer,','
-        write(*, *)'"reflectance_Q_total":',srqtot,','
-        write(*, *)'"reflectance_U_rayleigh":',sruray,','
-        write(*, *)'"reflectance_U_aerosol":',sruaer,','
-        write(*, *)'"reflectance_U_total":',srutot,','
-        write(*, *)'"polarized_reflect_rayleigh":',srpray,','
-        write(*, *)'"polarized_reflect_aerosol":',srpaer,','
-        write(*, *)'"polarized_reflect_total":',srptot,','
-        write(*, *)'"degree_of_polar_rayleigh":',sdpray,','
-        write(*, *)'"degree_of_polar_aerosol":',sdpaer,','
-        write(*, *)'"degree_of_polar_total":',sdptot,','
-        write(*, *)'"dir_plane_polar_rayleigh":',sdppray,','
-        write(*, *)'"dir_plane_polar_aerosol":',sdppaer,','
-        write(*, *)'"dir_plane_polar_total":',sdpptot,','
+        write(*, *)'"reflectance_I_rayleigh":"',sroray,'",'
+        write(*, *)'"reflectance_I_aerosol":"',sroaer,'",'
+        write(*, *)'"reflectance_I_total":"',srotot,'",'
+        write(*, *)'"reflectance_Q_rayleigh":"',srqray,'",'
+        write(*, *)'"reflectance_Q_aerosol":"',srqaer,'",'
+        write(*, *)'"reflectance_Q_total":"',srqtot,'",'
+        write(*, *)'"reflectance_U_rayleigh":"',sruray,'",'
+        write(*, *)'"reflectance_U_aerosol":"',sruaer,'",'
+        write(*, *)'"reflectance_U_total":"',srutot,'",'
+        write(*, *)'"polarized_reflect_rayleigh":"',srpray,'",'
+        write(*, *)'"polarized_reflect_aerosol":"',srpaer,'",'
+        write(*, *)'"polarized_reflect_total":"',srptot,'",'
+        write(*, *)'"degree_of_polar_rayleigh":"',sdpray,'",'
+        write(*, *)'"degree_of_polar_aerosol":"',sdpaer,'",'
+        write(*, *)'"degree_of_polar_total":"',sdptot,'",'
+        write(*, *)'"dir_plane_polar_rayleigh":"',sdppray,'",'
+        write(*, *)'"dir_plane_polar_aerosol":"',sdppaer,'",'
+        write(*, *)'"dir_plane_polar_total":"',sdpptot,'",'
 !CC	write(iwr, 931)'instrument app ref.:',zero,zero,refeti
-        write(*, *)'"phase_function_I_rayleigh":',fophsr,','
-        write(*, *)'"phase_function_I_aerosol":',fophsa,','
-        write(*, *)'"phase_function_I_total":',fophst,','
-        write(*, *)'"phase_function_Q_rayleigh":',foqhsr,','
-        write(*, *)'"phase_function_Q_aerosol":',foqhsa,','
-        write(*, *)'"phase_function_Q_total":',foqhst,','
-        write(*, *)'"phase_function_U_rayleigh":',fouhsr,','
-        write(*, *)'"phase_function_U_aerosol":',fouhsa,','
-        write(*, *)'"phase_function_U_total":',fouhst,','
-        write(*, *)'"primary_degree_of_pol_rayleigh":',spdpray,','
-        write(*, *)'"primary_degree_of_pol_aerosol":',spdpaer,','
-        write(*, *)'"primary_degree_of_pol_total":',spdptot,','
+        write(*, *)'"phase_function_I_rayleigh":"',fophsr,'",'
+        write(*, *)'"phase_function_I_aerosol":"',fophsa,'",'
+        write(*, *)'"phase_function_I_total":"',fophst,'",'
+        write(*, *)'"phase_function_Q_rayleigh":"',foqhsr,'",'
+        write(*, *)'"phase_function_Q_aerosol":"',foqhsa,'",'
+        write(*, *)'"phase_function_Q_total":"',foqhst,'",'
+        write(*, *)'"phase_function_U_rayleigh":"',fouhsr,'",'
+        write(*, *)'"phase_function_U_aerosol":"',fouhsa,'",'
+        write(*, *)'"phase_function_U_total":"',fouhst,'",'
+        write(*, *)'"primary_degree_of_pol_rayleigh":"',spdpray,'",'
+        write(*, *)'"primary_degree_of_pol_aerosol":"',spdpaer,'",'
+        write(*, *)'"primary_degree_of_pol_total":"',spdptot,'",'
       endif
-      write(*, *)'"single_scattering_albedo_rayleigh":',pizerr,','
-      write(*, *)'"single_scattering_albedo_aerosol":',pizera,','
-      write(*, *)'"single_scattering_albedo_total":',pizert
+      write(*, *)'"single_scattering_albedo_rayleigh":"',pizerr,'",'
+      write(*, *)'"single_scattering_albedo_aerosol":"',pizera,'",'
+      write(*, *)'"single_scattering_albedo_total":"',pizert,'"'
 !     write(iwr, 1401)
 !     write(iwr, 1402)
 
