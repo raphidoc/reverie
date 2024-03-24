@@ -58,12 +58,35 @@ The water vapor LUT is generated using the following parameters:
 
 """
 
+import concurrent.futures
+import itertools
 import os
 import subprocess
+import time
 
 import netCDF4
 import numpy as np
 from p_tqdm import p_uimap
+import json
+
+
+def format_estimated_time(estimated_time):
+    if estimated_time >= 60.0 * 60 * 24 * 365 * 100:
+        return str(estimated_time / (60.0 * 60 * 24 * 365 * 100)) + " centuries"
+    elif estimated_time >= 60.0 * 60 * 24 * 365:
+        return str(estimated_time / (60.0 * 60 * 24 * 365)) + " years"
+    elif estimated_time >= 60 * 60 * 24 * 30:
+        return str(estimated_time / (60 * 60 * 24 * 30)) + " months"
+    elif estimated_time >= 60 * 60 * 24 * 7:
+        return str(estimated_time / (60 * 60 * 24 * 7)) + " weeks"
+    elif estimated_time >= 60 * 60 * 24:
+        return str(estimated_time / (60 * 60 * 24)) + " days"
+    elif estimated_time >= 60 * 60:
+        return str(estimated_time / (60 * 60)) + " hours"
+    elif estimated_time >= 60:
+        return str(estimated_time / 60) + " minutes"
+    else:
+        return str(estimated_time) + " seconds"
 
 
 def create_gas_output_nc(filename, coords, compression=None, complevel=None):
@@ -75,20 +98,15 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     )
     # Create the dimensions
 
-    nc.createDimension("wavelength", len(coords["wavelengths"]))
-    nc.createDimension("sol_zen", 1)
-    nc.createDimension("view_zen", 1)
-    nc.createDimension("raa", 1)
-    nc.createDimension("target_pressure", 1)
-    nc.createDimension("sensor_altitude", 1)
-    nc.createDimension("water", 1)
-    nc.createDimension("ozone", 1)
+    nc.createDimension("sol_zen", len(coords["sol_zen"]))
+    nc.createDimension("view_zen", len(coords["view_zen"]))
+    nc.createDimension("relative_azimuth", len(coords["relative_azimuth"]))
+    nc.createDimension("water", len(coords["water"]))
+    nc.createDimension("ozone", len(coords["ozone"]))
+    nc.createDimension("target_pressure", len(coords["target_pressure"]))
+    nc.createDimension("sensor_altitude", len(coords["sensor_altitude"]))
+    nc.createDimension("wavelength", len(coords["wavelength"]))
 
-    # Create the coordinates variables
-    wavelength_nc = nc.createVariable("wavelength", "f4", ("wavelength",))
-    wavelength_nc.standard_name = "radiation_wavelength"
-    wavelength_nc.units = "nm"
-    wavelength_nc[:] = coords["wavelengths"]
 
     sol_zen_nc = nc.createVariable("sol_zen", "f4", ("sol_zen",))
     sol_zen_nc.standard_name = "solar_zenith_angle"
@@ -100,20 +118,11 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     view_zen_nc.units = "degree"
     view_zen_nc[:] = coords["view_zen"]
 
-    raa_nc = nc.createVariable("raa", "f4", ("raa",))
-    raa_nc.standard_name = "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
-    raa_nc.long_name = "relative_azimuth_angle"
-    raa_nc.units = "degree"
-    raa_nc[:] = coords["raa"]
-
-    pressure_nc = nc.createVariable("target_pressure", "f4", ("target_pressure",))
-    pressure_nc.units = "mbar"
-    pressure_nc[:] = coords["target_pressure"]
-
-    altitude_nc = nc.createVariable("sensor_altitude", "f4", ("sensor_altitude",))
-    altitude_nc.standard_name = "altitude"
-    altitude_nc.units = "km"
-    altitude_nc[:] = coords["sensor_altitude"]
+    relative_azimuth_nc = nc.createVariable("relative_azimuth", "f4", ("relative_azimuth",))
+    relative_azimuth_nc.standard_name = "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
+    relative_azimuth_nc.long_name = "relative_azimuth_angle"
+    relative_azimuth_nc.units = "degree"
+    relative_azimuth_nc[:] = coords["relative_azimuth"]
 
     water_nc = nc.createVariable("water", "f4", ("water",))
     water_nc.standard_name = "atmosphere_mass_content_of_water_vapor"
@@ -125,16 +134,31 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     ozone_nc.units = "atm-cm"
     ozone_nc[:] = coords["ozone"]
 
+    pressure_nc = nc.createVariable("target_pressure", "f4", ("target_pressure",))
+    pressure_nc.units = "mbar"
+    pressure_nc[:] = coords["target_pressure"]
+
+    altitude_nc = nc.createVariable("sensor_altitude", "f4", ("sensor_altitude",))
+    altitude_nc.standard_name = "altitude"
+    altitude_nc.units = "km"
+    altitude_nc[:] = coords["sensor_altitude"]
+
+    # Create the coordinates variables
+    wavelength_nc = nc.createVariable("wavelength", "f4", ("wavelength",))
+    wavelength_nc.standard_name = "radiation_wavelength"
+    wavelength_nc.units = "nm"
+    wavelength_nc[:] = coords["wavelength"]
+
     # Create the data variables
     dimensions = (
-        "wavelength",
         "sol_zen",
         "view_zen",
-        "raa",
-        "target_pressure",
-        "sensor_altitude",
+        "relative_azimuth",
         "water",
         "ozone",
+        "target_pressure",
+        "sensor_altitude",
+        "wavelength",
     )
 
     nc.createVariable(
@@ -147,173 +171,92 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     return nc
 
 
-def run_gaseous_sim(params: list):
-    """
-    Run the 6S simulation for the gaseous LUT
+# Function to run model and accumulate results
+def run_model_and_accumulate(start, end, commands, tgv, tgs):
+    global counter  # Declare counter as global
 
+    for i in range(start, end):
+        command = commands[i]
+        process = subprocess.run(command, shell=True, capture_output=True)
 
-    Parameters
-    ----------
-    params: list
-        List of parameters to pass to the simulation with order:
-        sol_zen, view_zen, raa, water, ozone, target_pressure, sensor_altitude, wavelength
+        temp = json.loads(process.stdout)
 
-    Returns
-    -------
+        tgv[i] = float(temp['global_gas_trans_upward'])
+        tgs[i] = float(temp['global_gas_trans_downward'])
+        counter += 1
 
-    """
-
-    # t0 = time.perf_counter()
-
-    kwargs = {}
-
-    input_str = "\n".join(
-        [
-            # Geometrical conditions
-            "0 # Geometrical conditions igeom",
-            f"{params[0]} 0.0 {params[1]} {params[2]} 1 1",
-            # Atmospheric conditions, gas
-            "8 # Atmospheric conditions, gas (idatm)",
-            f"{params[3]} {params[4]}",
-            # Aerosol type and concentration
-            "0 #iaer No aerosol",
-            "-1 # Visibility (km)",
-            # Target altitude as pressure in mb
-            f"{params[5]} # target altitude (xps)",
-            # Sensor altitude in km relative to target altitude
-            f"{params[6]} # Sensor altitude (xpp)",
-            # If aircraft simulation (> -110 < 0) enter water vapor, ozone content
-            # Aircraft water vapor, ozone and aot550
-            "-1.0 -1.0",
-            "-1.0",
-            # Spectrum selection for simulation
-            "-1 # Monochromatic spectrum selection (iwave)",
-            f"{params[7]}",
-            # Ground reflectance
-            "0 # Ground reflectance (inhomo)",
-            "0",
-            "0",
-            "0.000",
-            # Atmospheric correction
-            "-1 # Atmospheric correction (irapp)",
-            "",
-        ]
-    )
-
-    exec_6sv2 = "/home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"
-    process = subprocess.run(exec_6sv2, input=input_str, text=True, capture_output=True)
-
-    # process.stderr
-    # process.stdout
-
-    # Return the results in a dictionary with parameters
-    # return {
-    #     "coords": {
-    #         "wavelengths": wls,
-    #         "sol_zen": solar_z,
-    #         "view_zen": view_z,
-    #         "raa": raa,
-    #         "target_pressure": target_pressure,
-    #         "sensor_altitude": sensor_altitude,
-    #         "water": water,
-    #         "ozone": ozone,
-    #     },
-    #     "tgs": ,
-    #     "tgv": ,
-    # }
-
-
-def run_rayleigh_aerosol_sim(
-    wavelengths,
-    solar_z,
-    view_z,
-    raa,
-    target_pressure,
-    sensor_altitude,
-    aot550,
-):
     return
 
 
+# Declare the global counter
+counter = 0
+
+
 if __name__ == "__main__":
-    # common LUT dimensions using ATCOR
-    sol_zen_dim = np.arange(0, 70, 10).tolist()  # degree
-    # View zenith of WISE doesnt go above 24 degrees
-    view_zen_dim = np.arange(0, 40, 10).tolist()  # degree
-    raa_dim = np.arange(0.0, 180.0, 30).tolist()  # degree
-    target_pres_dim = [750.0, 1013.0, 1100]  # mbar
-    # Sensor altitude at -1000 is used by 6S to indicate satellite altitude
-    sensor_alt_dim = [
-        -0.5
-        -1,
-        -3,
-        -4
-    ]  # km
-    # These are the 20 node wavelengths used by 6S
-    wavelength_dim = [
-        0.350,
-        0.400,
-        0.412,
-        0.443,
-        0.470,
-        0.488,
-        0.515,
-        0.550,
-        0.590,
-        0.633,
-        0.670,
-        0.694,
-        0.760,
-        0.860,
-        1.240,
-        1.536,
-        1.650,
-        1.950,
-        2.250,
-        3.750,
+
+    # Function to generate cartesian product of input iterables
+    def cartesian_product(dimensions):
+        return list(itertools.product(*dimensions))
+
+    # Define your dimensions here
+    dimensions = [
+        np.arange(0, 90, 50).tolist(),  # sun zenith
+        np.arange(0, 70, 50).tolist(),  # view zenith
+        np.arange(0, 180, 30).tolist(),  # relative azimuth
+        [0.0, 0.5, 3.0],  # H2O
+        [0.0, 0.5, 3.0],  # Ozone
+        # aot550_dim = [
+        #     0.001,
+        #     0.01,
+        #     0.02,
+        #     0.05,
+        #     0.1,
+        #     0.15,
+        #     0.2,
+        #     0.3,
+        #     0.5,
+        #     0.7,
+        #     1,
+        #     1.3,
+        #     1.6,
+        #     2,
+        #     3,
+        #     5,
+        # ], # aot550
+        [750.0, 1013.0, 1100.0],  # pressure at target
+        [-0.5, -1, -3, -4],  # sensor altitude
+        np.arange(0.34, 1.1, 0.01).tolist()  # wavelength
     ]
 
-    # Gaseous LUT dimensions
-    water_dim = np.arange(0.0, 4.0, 0.5).tolist()  # g cm-2
-    ozone_dim = np.arange(0.0, 0.5, 0.05).tolist()  # atm-cm
+    combination = cartesian_product(dimensions)
 
-    # Create an iterator for the parameters to pass to the gas simulation
-    # Use of a dictionary would be more readable
-    # order must be the same as in the input_str
-    # sol_zen, view_zen, raa, water, ozone, target_pressure, sensor_altitude, wavelength
-    param_iter = np.array(
-        np.meshgrid(
-            sol_zen_dim,
-            view_zen_dim,
-            raa_dim,
-            water_dim,
-            ozone_dim,
-            target_pres_dim,
-            sensor_alt_dim,
-            wavelength_dim,
-        )
-    ).T.reshape(-1, 8, order="C")
+    print("number of combination: ", len(combination))
 
-    # add the wavelength dimension to the parameter iterator
-    # Not working, create an array with memory size ~ 52.9 TiB
-    # wavelength_array = np.repeat(
-    #     np.array(wavelength_dim).reshape(-1, 1), param_iter.shape[0], axis=1
-    # ).T
-    # param_iter = np.insert(param_iter, 0, wavelength_array, axis=1)
+    tgv = [0] * len(combination)
+    tgs = [0] * len(combination)
 
-    combination = (
-        len(sol_zen_dim)
-        * len(view_zen_dim)
-        * len(raa_dim)
-        * len(target_pres_dim)
-        * len(sensor_alt_dim)
-        * len(water_dim)
-        * len(ozone_dim)
-    )
-
-    print(
-        f"{combination} parameters combinations to simulate {combination * 15 / 3600:.2f}h"
-    )
+    # Create commands
+    commands = []
+    for i in range(len(combination)):
+        command = "echo \"\n0 # IGEOM\n" + \
+                  f"{combination[i][0]} 0.0 {combination[i][1]} {combination[i][2]} 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n" + \
+                  "8 # IDATM no gas\n" + \
+                  f"{combination[i][3]}\n" + \
+                  f"{combination[i][4]}\n" + \
+                  "0 # IAER maritime\n" + \
+                  "-1 # visibility\n" + \
+                  f"{combination[i][5]} # XPS pressure at terget\n" + \
+                  f"{combination[i][6]} # XPP sensor altitude\n" + \
+                  "-1.0 -1.0 # UH20 UO3 below sensor\n" + \
+                  "-1.0 # taer550 below sensor\n" + \
+                  "-1 # IWAVE monochromatic\n" + \
+                  f"{combination[i][7]} # wavelength\n" + \
+                  "0 # INHOMO\n" + \
+                  "0 # IDIREC\n" + \
+                  "0 # IGROUN 0 = rho\n" + \
+                  "0 # surface reflectance\n" + \
+                  "-1 # IRAPP no atmospheric correction\n\" | /home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1"
+        commands.append(command)
 
     lut_dir = "/home/raphael/PycharmProjects/reverie/reverie/data/lut"
 
@@ -322,124 +265,94 @@ if __name__ == "__main__":
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
-    # Create a pool of workers
-    # with Pool() as p:
-    #     results = tqdm(p.imap_unordered(run_simulation, param_iter[0:1]))
+    # Determine the number of workers to use
+    num_workers = os.cpu_count()
 
-    iterator = p_uimap(run_gaseous_sim, param_iter)
+    print(f"Running on {num_workers} threads")
 
-    # Write the results to separate files
-    for i, result in enumerate(iterator):
-        continue
+    # Calculate the number of iterations per worker
+    iterations_per_worker = len(combination) // num_workers
 
-    #     filename = f"gas_output_{i}.nc"
-    #
-    #     coords = result["coords"]
-    #
-    #     nc = create_gas_output_nc(os.path.join(output_dir, filename), coords)
-    #
-    #     # Write the results to the file
-    #     nc.variables["tgs"][
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #     ] = result["tgs"]
-    #
-    #     nc.variables["tgv"][
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #         :,
-    #     ] = result["tgv"]
-    #
-    #     nc.close()
-    #
-    # # Merge the files
-    # files = [os.path.join(output_dir, file) for file in os.listdir(output_dir)]
-    # combined = xr.open_mfdataset(files)
-    # combined.to_netcdf(os.path.join(lut_dir, "combined.nc"))
+    start_time = time.perf_counter()
 
-# for i in tqdm(range(param_iter.shape[0])):
-#     print(f"\r\nSimulating {i + 1} / {param_iter.shape[0]}")
-#     # Get the parameters
-#     (
-#         sol_zen,
-#         view_zen,
-#         raa,
-#         target_pressure,
-#         sensor_altitude,
-#         water,
-#         ozone,
-#     ) = param_iter[i]
-#
-#     # Run the simulation
-#     wls, res = run_gaseous_sim(
-#         wavelength_dim,
-#         sol_zen,
-#         view_zen,
-#         raa,
-#         target_pressure,
-#         sensor_altitude,
-#         water,
-#         ozone,
-#     )
-#
-#     # Check some results in original format
-#     # with open("/home/raphael/PycharmProjects/reverie/reverie/data/lut/6S_output.txt", 'w') as f:
-#     #     f.write(res_df['fulltext'][0])
-#
-#     # Write the results to the LUT
-#     tgs_nc[
-#         :,
-#         sol_zen_dim.index(sol_zen),
-#         view_zen_dim.index(view_zen),
-#         raa_dim.index(raa),
-#         target_pres_dim.index(target_pressure),
-#         sensor_alt_dim.index(sensor_altitude),
-#         water_dim.index(water),
-#         ozone_dim.index(ozone),
-#     ] = [
-#         r.transmittance_global_gas.downward for r in res
-#     ]  # res_df["global_gas_downward"]
-#
-#     tgv_nc[
-#         :,
-#         sol_zen_dim.index(sol_zen),
-#         view_zen_dim.index(view_zen),
-#         raa_dim.index(raa),
-#         target_pres_dim.index(target_pressure),
-#         sensor_alt_dim.index(sensor_altitude),
-#         water_dim.index(water),
-#         ozone_dim.index(ozone),
-#     ] = [
-#         r.transmittance_global_gas.upward for r in res
-#     ]  # res_df["global_gas_upward"]
+    # Create a ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # Start each worker
+        futures = []
+        for i in range(num_workers):
+            # Calculate the start and end indices for this worker
+            start = i * iterations_per_worker
+            end = start + iterations_per_worker if i != num_workers - 1 else len(combination)
 
-# Rayleigh aerosol LUT dimensions
-# aot550_dim = [
-#     0.001,
-#     0.01,
-#     0.02,
-#     0.05,
-#     0.1,
-#     0.15,
-#     0.2,
-#     0.3,
-#     0.5,
-#     0.7,
-#     1,
-#     1.3,
-#     1.6,
-#     2,
-#     3,
-#     5,
-# ]
+            # Start the worker
+            futures.append(
+                executor.submit(run_model_and_accumulate, start, end, commands, tgv, tgs))
+
+        while counter < len(combination):
+            time.sleep(1)  # Sleep for a second
+
+            now = time.perf_counter()
+            elapsed = now - start_time
+
+            if elapsed > 0:  # To avoid division by zero
+                print(f"\r({counter}/{len(combination)}) | ", end="")
+
+                iterations_per_second = counter / elapsed
+                print(f"Iterations per second: {iterations_per_second}", end="")
+
+                estimated_total_time = (len(combination) - counter) / iterations_per_second
+                print(f" | Estimated time upon completion: {format_estimated_time(estimated_total_time)}", end="",
+                      flush=True)
+
+        # Wait for all workers to finish
+        concurrent.futures.wait(futures)
+
+        now = time.perf_counter()
+        elapsed = now - start_time
+        print(f"Time elapsed: {elapsed}")
+
+        coords = {
+            "sol_zen": dimensions[0],
+            "view_zen": dimensions[1],
+            "relative_azimuth": dimensions[2],
+            "water": dimensions[3],
+            "ozone": dimensions[4],
+            "target_pressure": dimensions[5],
+            "sensor_altitude": dimensions[6],
+            "wavelength": dimensions[7]
+        }
+
+    nc = create_gas_output_nc(os.path.join(output_dir, "test_gas.nc"), coords)
+
+    # Get the shape of the dimensions
+    shape = [len(dimension) for dimension in dimensions]
+
+    tgs_reshaped = np.reshape(tgs, shape)
+    tgv_reshaped = np.reshape(tgv, shape)
+
+    # Write the results to the file
+    nc.variables["tgs"][
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+    ] = tgs_reshaped
+
+    nc.variables["tgv"][
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+            :,
+    ] = tgv_reshaped
+
+    nc.close()
+
+
