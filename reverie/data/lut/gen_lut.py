@@ -198,13 +198,15 @@ if __name__ == "__main__":
     def cartesian_product(dimensions):
         return list(itertools.product(*dimensions))
 
+
+
     # Define your dimensions here
     dimensions = [
         np.arange(0, 90, 50).tolist(),  # sun zenith
         np.arange(0, 70, 50).tolist(),  # view zenith
         np.arange(0, 180, 30).tolist(),  # relative azimuth
-        [0.0, 0.5, 3.0],  # H2O
-        [0.0, 0.5, 3.0],  # Ozone
+        [0.0,  0.5, 1.0,  1.5, 2.0,  2.5, 3.0,  3.5, 4.0 ],  # H2O
+        [0.0, 0.25, 0.3, 0.5, 0.8],  # Ozone https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         # aot550_dim = [
         #     0.001,
         #     0.01,
