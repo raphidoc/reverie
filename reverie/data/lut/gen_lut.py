@@ -199,14 +199,15 @@ if __name__ == "__main__":
         return list(itertools.product(*dimensions))
 
 
-
+    # TODO, run only for the 20 node wavelength of 6S
+    #  they use liner interpolation for the rest of the spectrun anyway
     # Define your dimensions here
     dimensions = [
         np.arange(0, 90, 50).tolist(),  # sun zenith
         np.arange(0, 70, 50).tolist(),  # view zenith
         np.arange(0, 180, 30).tolist(),  # relative azimuth
-        [0.0,  0.5, 1.0,  1.5, 2.0,  2.5, 3.0,  3.5, 4.0 ],  # H2O
-        [0.0, 0.25, 0.3, 0.5, 0.8],  # Ozone https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+        [0.0,  0.5, 1.0,  1.5, 2.0,  2.5, 3.0,  3.5, 4.0 ],  # H2O g/cm2
+        [0.0, 0.25, 0.3, 0.5, 0.8],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         # aot550_dim = [
         #     0.001,
         #     0.01,
@@ -225,9 +226,9 @@ if __name__ == "__main__":
         #     3,
         #     5,
         # ], # aot550
-        [750.0, 1013.0, 1100.0],  # pressure at target
-        [-0.5, -1, -3, -4],  # sensor altitude
-        np.arange(0.34, 1.1, 0.01).tolist()  # wavelength
+        [750.0, 1013.0, 1100.0],  # pressure at target mb
+        [-0.5, -1, -3, -4],  # sensor altitude -km
+        np.arange(0.34, 1.1, 0.01).tolist()  # wavelength um
     ]
 
     combination = cartesian_product(dimensions)
@@ -257,7 +258,7 @@ if __name__ == "__main__":
                   "0 # IDIREC\n" + \
                   "0 # IGROUN 0 = rho\n" + \
                   "0 # surface reflectance\n" + \
-                  "-1 # IRAPP no atmospheric correction\n\" | /home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1"
+                  "-1 # IRAPP no atmospheric correction\n\" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"
         commands.append(command)
 
     lut_dir = "/home/raphael/PycharmProjects/reverie/reverie/data/lut"

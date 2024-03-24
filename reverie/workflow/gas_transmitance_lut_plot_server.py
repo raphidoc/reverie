@@ -8,7 +8,7 @@ from bokeh.layouts import row, column
 import scipy as sp
 
 gas_trans_nc = xr.open_dataset(
-    "/home/raphael/PycharmProjects/acolite/data/LUT/Gas/Gas_202106F.nc"
+    "/home/raphael/PycharmProjects/reverie/reverie/data/lut/output/test_gas.nc"
 )
 
 # Generate some sample data
