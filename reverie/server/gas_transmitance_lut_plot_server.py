@@ -12,14 +12,15 @@ gas_trans_nc = xr.open_dataset(
 )
 
 # Generate some sample data
-wavelength = gas_trans_nc.variables["wavelength"].values
 sun_zenith = gas_trans_nc.variables["sol_zen"].values
 view_zenith = gas_trans_nc.variables["view_zen"].values
 relative_azimuth = gas_trans_nc.variables["relative_azimuth"].values
-target_pressure = gas_trans_nc.variables["target_pressure"].values
-sensor_altitude = gas_trans_nc.variables["sensor_altitude"].values
 water = gas_trans_nc.variables["water"].values
 ozone = gas_trans_nc.variables["ozone"].values
+target_pressure = gas_trans_nc.variables["target_pressure"].values
+sensor_altitude = gas_trans_nc.variables["sensor_altitude"].values
+wavelength = gas_trans_nc.variables["wavelength"].values
+
 
 # Set up initial values
 selected_ths = sun_zenith[0]
@@ -98,7 +99,6 @@ r = plot.line(
 #            text_baseline="middle", text_align="center")
 
 ds = r.data_source
-
 
 # create a callback that adds a number in a random location
 def callback(attr, old, new):

@@ -107,7 +107,6 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     nc.createDimension("sensor_altitude", len(coords["sensor_altitude"]))
     nc.createDimension("wavelength", len(coords["wavelength"]))
 
-
     sol_zen_nc = nc.createVariable("sol_zen", "f4", ("sol_zen",))
     sol_zen_nc.standard_name = "solar_zenith_angle"
     sol_zen_nc.units = "degree"
@@ -118,8 +117,12 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     view_zen_nc.units = "degree"
     view_zen_nc[:] = coords["view_zen"]
 
-    relative_azimuth_nc = nc.createVariable("relative_azimuth", "f4", ("relative_azimuth",))
-    relative_azimuth_nc.standard_name = "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
+    relative_azimuth_nc = nc.createVariable(
+        "relative_azimuth", "f4", ("relative_azimuth",)
+    )
+    relative_azimuth_nc.standard_name = (
+        "angle_of_rotation_from_solar_azimuth_to_platform_azimuth"
+    )
     relative_azimuth_nc.long_name = "relative_azimuth_angle"
     relative_azimuth_nc.units = "degree"
     relative_azimuth_nc[:] = coords["relative_azimuth"]
@@ -181,8 +184,8 @@ def run_model_and_accumulate(start, end, commands, tgv, tgs):
 
         temp = json.loads(process.stdout)
 
-        tgv[i] = float(temp['global_gas_trans_upward'])
-        tgs[i] = float(temp['global_gas_trans_downward'])
+        tgv[i] = float(temp["global_gas_trans_upward"])
+        tgs[i] = float(temp["global_gas_trans_downward"])
         counter += 1
 
     return
@@ -193,11 +196,9 @@ counter = 0
 
 
 if __name__ == "__main__":
-
     # Function to generate cartesian product of input iterables
     def cartesian_product(dimensions):
         return list(itertools.product(*dimensions))
-
 
     # TODO, run only for the 20 node wavelength of 6S
     #  they use liner interpolation for the rest of the spectrun anyway
@@ -206,8 +207,14 @@ if __name__ == "__main__":
         np.arange(0, 90, 50).tolist(),  # sun zenith
         np.arange(0, 70, 50).tolist(),  # view zenith
         np.arange(0, 180, 30).tolist(),  # relative azimuth
-        [0.0,  0.5, 1.0,  1.5, 2.0,  2.5, 3.0,  3.5, 4.0 ],  # H2O g/cm2
-        [0.0, 0.25, 0.3, 0.5, 0.8],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
+        [
+            0.0,
+            0.25,
+            0.3,
+            0.5,
+            0.8,
+        ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         # aot550_dim = [
         #     0.001,
         #     0.01,
@@ -228,7 +235,28 @@ if __name__ == "__main__":
         # ], # aot550
         [750.0, 1013.0, 1100.0],  # pressure at target mb
         [-0.5, -1, -3, -4],  # sensor altitude -km
-        np.arange(0.34, 1.1, 0.01).tolist()  # wavelength um
+        [
+            0.350,
+            0.400,
+            0.412,
+            0.443,
+            0.470,
+            0.488,
+            0.515,
+            0.550,
+            0.590,
+            0.633,
+            0.670,
+            0.694,
+            0.760,
+            0.860,
+            1.240,
+            1.536,
+            1.650,
+            1.950,
+            2.250,
+            3.750,
+        ],
     ]
 
     combination = cartesian_product(dimensions)
@@ -241,24 +269,26 @@ if __name__ == "__main__":
     # Create commands
     commands = []
     for i in range(len(combination)):
-        command = "echo \"\n0 # IGEOM\n" + \
-                  f"{combination[i][0]} 0.0 {combination[i][1]} {combination[i][2]} 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n" + \
-                  "8 # IDATM no gas\n" + \
-                  f"{combination[i][3]}\n" + \
-                  f"{combination[i][4]}\n" + \
-                  "0 # IAER maritime\n" + \
-                  "-1 # visibility\n" + \
-                  f"{combination[i][5]} # XPS pressure at terget\n" + \
-                  f"{combination[i][6]} # XPP sensor altitude\n" + \
-                  "-1.0 -1.0 # UH20 UO3 below sensor\n" + \
-                  "-1.0 # taer550 below sensor\n" + \
-                  "-1 # IWAVE monochromatic\n" + \
-                  f"{combination[i][7]} # wavelength\n" + \
-                  "0 # INHOMO\n" + \
-                  "0 # IDIREC\n" + \
-                  "0 # IGROUN 0 = rho\n" + \
-                  "0 # surface reflectance\n" + \
-                  "-1 # IRAPP no atmospheric correction\n\" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1"
+        command = (
+            'echo "\n0 # IGEOM\n'
+            + f"{combination[i][0]} 0.0 {combination[i][1]} {combination[i][2]} 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
+            + "8 # IDATM no gas\n"
+            + f"{combination[i][3]}\n"
+            + f"{combination[i][4]}\n"
+            + "0 # IAER maritime\n"
+            + "-1 # visibility\n"
+            + f"{combination[i][5]} # XPS pressure at terget\n"
+            + f"{combination[i][6]} # XPP sensor altitude\n"
+            + "-1.0 -1.0 # UH20 UO3 below sensor\n"
+            + "-1.0 # taer550 below sensor\n"
+            + "-1 # IWAVE monochromatic\n"
+            + f"{combination[i][7]} # wavelength\n"
+            + "0 # INHOMO\n"
+            + "0 # IDIREC\n"
+            + "0 # IGROUN 0 = rho\n"
+            + "0 # surface reflectance\n"
+            + '-1 # IRAPP no atmospheric correction\n" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1'
+        )
         commands.append(command)
 
     lut_dir = "/home/raphael/PycharmProjects/reverie/reverie/data/lut"
@@ -285,11 +315,18 @@ if __name__ == "__main__":
         for i in range(num_workers):
             # Calculate the start and end indices for this worker
             start = i * iterations_per_worker
-            end = start + iterations_per_worker if i != num_workers - 1 else len(combination)
+            end = (
+                start + iterations_per_worker
+                if i != num_workers - 1
+                else len(combination)
+            )
 
             # Start the worker
             futures.append(
-                executor.submit(run_model_and_accumulate, start, end, commands, tgv, tgs))
+                executor.submit(
+                    run_model_and_accumulate, start, end, commands, tgv, tgs
+                )
+            )
 
         while counter < len(combination):
             time.sleep(1)  # Sleep for a second
@@ -303,9 +340,14 @@ if __name__ == "__main__":
                 iterations_per_second = counter / elapsed
                 print(f"Iterations per second: {iterations_per_second}", end="")
 
-                estimated_total_time = (len(combination) - counter) / iterations_per_second
-                print(f" | Estimated time upon completion: {format_estimated_time(estimated_total_time)}", end="",
-                      flush=True)
+                estimated_total_time = (
+                    len(combination) - counter
+                ) / iterations_per_second
+                print(
+                    f" | Estimated time upon completion: {format_estimated_time(estimated_total_time)}",
+                    end="",
+                    flush=True,
+                )
 
         # Wait for all workers to finish
         concurrent.futures.wait(futures)
@@ -322,7 +364,7 @@ if __name__ == "__main__":
             "ozone": dimensions[4],
             "target_pressure": dimensions[5],
             "sensor_altitude": dimensions[6],
-            "wavelength": dimensions[7]
+            "wavelength": dimensions[7],
         }
 
     nc = create_gas_output_nc(os.path.join(output_dir, "test_gas.nc"), coords)
@@ -335,27 +377,25 @@ if __name__ == "__main__":
 
     # Write the results to the file
     nc.variables["tgs"][
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
     ] = tgs_reshaped
 
     nc.variables["tgv"][
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
-            :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
+        :,
     ] = tgv_reshaped
 
     nc.close()
-
-

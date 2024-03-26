@@ -345,7 +345,7 @@ C*******INTERNAL FLAG*********
 c***********************************************************************
 c                             return to 6s
 c***********************************************************************
-c TODO: This seems to be the 20 discrete wavelength on wich sixs actually run and latter interpolate
+c TODO: This seems to be the 20 discrete wavelength on wich sixs actually run and later interpolate
       data wldisc /0.350,0.400,0.412,0.443,0.470,0.488,0.515,0.550,
      s             0.590,0.633,0.670,0.694,0.760,0.860,1.240,1.536,
      s             1.650,1.950,2.250,3.750/

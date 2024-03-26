@@ -173,14 +173,14 @@ inputs = column(azi_select, thv_select, ths_select, wind_select, tau_select)
 # thv_slider = Slider(
 #     start=view_zenith.min(),
 #     end=view_zenith.max(),
-#     value=selected_thv,
+#     value=sel_thv,
 #     step=1,
 #     title="Thv",
 # )
 # ths_slider = Slider(
 #     start=sun_zenith.min(),
 #     end=sun_zenith.max(),
-#     value=selected_ths,
+#     value=sel_ths,
 #     step=1,
 #     title="Ths",
 # )
