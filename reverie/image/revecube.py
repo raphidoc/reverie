@@ -17,6 +17,7 @@ import shapely
 import xarray as xr
 import math
 import zarr
+import affine
 
 # REVERIE import
 from reverie.utils import helper, astronomy
@@ -55,7 +56,7 @@ class ReveCube(ABC):
         Number of rows
     n_cols: int
         Number of columns
-    affine: Affine
+    Affine: Affine
         Affine transformation
     crs: pyproj.crs.CRS
         Coordinate Reference System
@@ -114,6 +115,11 @@ class ReveCube(ABC):
 
         if os.path.isfile(in_path):
             in_ds = xr.open_dataset(in_path, decode_times=False)
+
+            # in_ds = netCDF4.Dataset(in_path, "r+", format="NETCDF4")
+            # image_name = os.path.basename(in_path).split(".")[0]
+            # in_ds.image_name = image_name
+            # in_ds.close()
         else:
             raise Exception(f"File {in_path} does not exist")
 
@@ -121,6 +127,9 @@ class ReveCube(ABC):
 
     @classmethod
     def decode_xr(cls, in_path, in_ds: xr.Dataset):
+        # Image name
+        image_name = in_ds.attrs["image_name"]
+
         # Spectral attributes
         wavelength = in_ds.variables["wavelength"].data
 
@@ -144,14 +153,15 @@ class ReveCube(ABC):
 
         grid_mapping = in_ds.variables["grid_mapping"]
 
-        # TODO: affine transformation sould be read from the grid_mapping
-        #   CF doesn't define a way to store it
-        affine = None
+        # Get affine_transform and crs from grid_mapping
+        a, b, c, d, e, f = grid_mapping.attrs["affine_transform"]
+        Affine = affine.Affine(a, b, c, d, e, f)
         crs = pyproj.CRS.from_wkt(grid_mapping.attrs["crs_wkt"])
 
         return cls(
             in_path,
             in_ds,
+            image_name,
             wavelength,
             acq_time_z,
             z,
@@ -161,7 +171,7 @@ class ReveCube(ABC):
             lon,
             n_rows,
             n_cols,
-            affine,
+            Affine,
             crs,
         )
 
@@ -169,6 +179,7 @@ class ReveCube(ABC):
         self,
         in_path: str,
         in_ds: xr.Dataset,
+        image_name: str,
         wavelength: np.ndarray,
         acq_time_z: datetime.datetime,
         z: float,
@@ -178,12 +189,14 @@ class ReveCube(ABC):
         lon: np.ndarray,
         n_rows: int,
         n_cols: int,
-        affine,
+        Affine,
         crs: pyproj.crs.CRS,
     ):
         # Dataset accessor
         self.in_path = in_path
         self.in_ds = in_ds
+
+        self.image_name = image_name
 
         # Spectral attributes
         self.wavelength = wavelength
@@ -197,7 +210,7 @@ class ReveCube(ABC):
         self.lat = lat
         self.n_rows = n_rows
         self.n_cols = n_cols
-        self.Affine = affine
+        self.Affine = Affine
         self.CRS = crs
 
         # Sensor attribute store metadata from the sensor in a dictionary
@@ -259,9 +272,9 @@ class ReveCube(ABC):
         center_longitude:
         center_latitude:
         """
-        logging.debug('calculating pixel coordinates')
+        logging.debug("calculating pixel coordinates")
 
-        # Define image projected coordinates from affine tranformation
+        # Define image projected coordinates from Affine tranformation
         x, y = helper.transform_xy(
             affine, rows=list(range(n_rows)), cols=list(range(n_cols))
         )
@@ -327,7 +340,7 @@ class ReveCube(ABC):
         logging.info(f"central longitude of {tz}:{self.central_lon_local_timezone}")
 
     def cal_sun_geom(self):
-        """ calculate solar zenith and azimuth angle for each pixel in the scene
+        """calculate solar zenith and azimuth angle for each pixel in the scene
         Parameters
         ----------
         acq_time_local: local time of image acquisition
@@ -340,7 +353,7 @@ class ReveCube(ABC):
         sun_azimuth: spatially resolved solar azimuth [degree]
         """
 
-        logging.debug('calculating solar zenith and azimuth')
+        logging.debug("calculating solar zenith and azimuth")
 
         utc_offset = self.acq_time_local.utcoffset().total_seconds() / 3600
 
@@ -357,7 +370,7 @@ class ReveCube(ABC):
         :param tile: an object of class tile.Tile()
         :return:[]
         """
-        logging.debug('geting valid mask')
+        logging.debug("geting valid mask")
         if self._valid_mask is None:
             self.cal_valid_mask()
         if tile is None:
@@ -370,12 +383,12 @@ class ReveCube(ABC):
         Calculate the mask of valid pixel for the entire image (!= nodata)
         :return: _valid_mask
         """
-        logging.debug('calculating valid mask')
+        logging.debug("calculating valid mask")
         if self._valid_mask is None:
             # Select the first variable with dim (wavelength, y, x) to compute the valid mask
             for name, data in self.in_ds.data_vars.items():
                 if data.dims == ("wavelength", "y", "x"):
-                    self._valid_mask = data.isel(W=0).notnull().data
+                    self._valid_mask = data.isel(wavelength=5).notnull().data
                     break
 
     def read_band(self, bandindex, tile: Tile = None):
@@ -391,8 +404,20 @@ class ReveCube(ABC):
         """
         calculate relative azimuth angle
         :return:
+        The angle between the viewing and the sun azimuth retricted to 0 - 180 degree, 0 facing towards the sun and 180 facing away from the sun
         """
-        self.relative_azimuth = np.abs(self.view_azimuth - self.sun_azimuth)
+        # TODO: verify the reference system for the azimuth angles in OSOAA, ATCOR
+        # In ACOLTIE and 6S relative azimuth is defined as theta_s - theta_v in the range 0 - 180
+        # if 0  then theta_s = theta_v, viewing is in the incidence direction of the sun ray, looking away from it
+        # if 180 then viewing is in the opposite direction of the sun's ray, looking toward it
+        relative_azimuth = np.abs(self.view_azimuth - self.sun_azimuth)
+
+        if 0 <= relative_azimuth.all() <= 180:
+            self.relative_azimuth = relative_azimuth
+        elif 180 < relative_azimuth.all() <= 360:
+            self.relative_azimuth = 360 - relative_azimuth
+        else:
+            raise ValueError("relative azimuth is not in a valid 0 - 360 range")
 
     # @abstractmethod
     def cal_view_geom(self):
@@ -431,6 +456,7 @@ class ReveCube(ABC):
         nc_ds.version = "0.1.0"
         nc_ds.references = "https://github.com/raphidoc/reverie"
         nc_ds.comment = "Reflectance Extraction and Validation for Environmental Remote Imaging Exploration"
+        nc_ds.image_name = os.path.basename(self.in_path).split(".")[0]
 
         # Create Dimensions
         nc_ds.createDimension("wavelength", len(self.wavelength))
@@ -526,6 +552,15 @@ class ReveCube(ABC):
         grid_mapping.scale_factor_at_central_meridian = cf_grid_mapping[
             "scale_factor_at_central_meridian"
         ]
+
+        grid_mapping.affine_transform = (
+            self.Affine.a,
+            self.Affine.b,
+            self.Affine.c,
+            self.Affine.d,
+            self.Affine.e,
+            self.Affine.f,
+        )
 
         # self.proj_var = grid_mapping
         self.out_ds = nc_ds
@@ -665,9 +700,9 @@ class ReveCube(ABC):
 
         matchup_gdf = pd.read_csv(matchup_file)
         matchup_gdf.columns = matchup_gdf.columns.str.lower()
-        matchup_gdf = matchup_gdf[["datetime", "lon", "lat", "uuid"]]
+        matchup_gdf = matchup_gdf[["datetime", "lat", "lon", "uuid"]]
 
-        # When matchup data is in long format, keep unique observation
+        # When matchup data is in long format (wavelength along the rows), keep unique observation
         matchup_gdf = matchup_gdf.drop_duplicates()
 
         # Filter observation outside requested time range
@@ -677,25 +712,57 @@ class ReveCube(ABC):
                 abs(matchup_gdf["datetime"] - self.acq_time_z)
                 < pd.Timedelta(max_time_diff, unit="h")
             ]
-            # TODO: write a warning and exit if no data remain after time filtering.
+            logging.info(
+                "%s observations remaining after time filtering" % len(matchup_gdf)
+            )
 
-        # matchup_gdf = matchup_gdf[valid_mask]
+            if len(matchup_gdf) == 0:
+                raise Exception("no matchup data remaining after time filter")
 
+        # Project matchup data to image
         match_geometry = gpd.points_from_xy(
             matchup_gdf["lon"], matchup_gdf["lat"], crs="EPSG:4326"
         )
 
         matchup_gdf = gpd.GeoDataFrame(matchup_gdf, geometry=match_geometry)
 
-        print(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
+        logging.info(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
         matchup_gdf = matchup_gdf.to_crs(self.CRS.to_epsg())
 
+        import rasterio.features
+        from shapely.geometry import shape
+
         # Filter observation outside the image valid_mask
-        # valid_mask = self.get_valid_mask()
+        valid_mask = self.get_valid_mask()
+
+        # Convert the valid_mask to list of polygon(s)
+        polygons = [
+            shape(geom)
+            for geom, value in rasterio.features.shapes(
+                valid_mask.astype("int16"), mask=valid_mask, transform=self.Affine
+            )
+            if value == 1
+        ]
+
+        # Convert the list of polygons to a GeoDataFrame
+        footprint_gdf = gpd.GeoDataFrame(geometry=polygons, crs=matchup_gdf.crs)
+
+        # Write the GeoDataFrame to a GeoJSON file
+        # footprint_gdf.to_file("footprint.geojson", driver="GeoJSON")
+
+        # Step 3: Perform a spatial join between the matchup_gdf and the polygons_gdf
+        filtered_gdf = gpd.sjoin(
+            matchup_gdf, footprint_gdf, how="inner", predicate="intersects"
+        )
+
+        logging.info("%s" % len(filtered_gdf))
+
+        if len(filtered_gdf) == 0:
+            raise Exception("no matchup data remaining after spatial filter")
 
         pixex_df = pd.DataFrame()
-        for uuid in tqdm(matchup_gdf["uuid"]):
-            temp_gdf = matchup_gdf[matchup_gdf["uuid"] == uuid].reset_index()
+        for uuid in tqdm(filtered_gdf["uuid"]):
+            temp_gdf = filtered_gdf[filtered_gdf["uuid"] == uuid].reset_index()
 
             # Get the nearest pixel index at coordinates
             # The line of code `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()` is used to find the index of the pixel that is closest to a specific geographic coordinate.
@@ -780,6 +847,7 @@ class ReveCube(ABC):
             # TODO output a wide format when wavelength and non wavelength data are mixed
             # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='radiance_at_sensor')
             temp_pixex_df["uuid"] = uuid
+            temp_pixex_df["image_name"] = self.image_name
             # temp_pixex_df['Sensor'] = str(temp_pix_ex_array.Sensor.values)
             # temp_pixex_df['ImageDate'] = str(temp_pix_ex_array.coords['isodate'].values)
             # temp_pixex_df['AtCor'] = 'ac4icw'

@@ -320,7 +320,7 @@ def cal_solar_zenith_azimuth(latitude, hour_angle, declination):
 def findLocalTimeZone(longitude, latitude):
     timezone_local_name = TimezoneFinder().timezone_at(lng=longitude, lat=latitude)
 
-    if timezone_local_name not in pendulum.timezones():
+    if timezone_local_name not in pendulum.timezones:
         print(
             "{} can not be recongnized as pendulum.timezones".format(
                 timezone_local_name

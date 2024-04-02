@@ -19,18 +19,18 @@ def run_viccal_6s(params: str):
 
 if __name__ == "__main__":
     input_data = pd.read_csv(
-        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/Lt_rhow_merged.csv"
+        "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/radiance_at_sensor_rho_w_plus_sky_merged.csv"
     )
 
     temp = pd.DataFrame()
     for i in tqdm(range(len(input_data))):
         kwargs = {
-            "sol_zen": input_data["SolZen_mean"][i],
-            "sol_azi": input_data["SolAzi_mean"][i],
-            "view_zen": input_data["ViewZen_mean"][i],
-            "view_azi": input_data["ViewAzi_mean"][i],
-            "aot550": 0.04,
-            "sensor_altitude": -3.049,
+            "sol_zen": input_data["sun_zenith_mean"][i],
+            "sol_azi": input_data["sun_azimuth_mean"][i],
+            "view_zen": input_data["view_zenith_mean"][i],
+            "view_azi": input_data["view_azimuth_mean"][i],
+            "aot550": 0.12,
+            "sensor_altitude": -(input_data["z_mean"][i]/1000),
             "wavelength": input_data["Wavelength"][i] * 1e-3,
             "water_reflectance": input_data["rhow_plus_glint"][i],
         }

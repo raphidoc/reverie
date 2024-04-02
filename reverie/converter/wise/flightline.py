@@ -128,16 +128,13 @@ class FlightLine:
         )
 
         # Convert heading to 0, 360 range
-        azimuth = self.heading
-
-        if azimuth < 0:
-            azimuth += 360
+        azimuth = self.heading % 360
 
         # Right Wing
-        va_ = azimuth + 90
+        va_ = (azimuth + 90) % 360
         va = np.full_like(vz, va_)
 
         # Left Wing
-        va[nadir_x:] = azimuth - 90
+        va[nadir_x:] = (azimuth - 90) % 360
 
         return np.tile(vz, (self.lines, 1)), np.tile(va, (self.lines, 1))

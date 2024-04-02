@@ -56,6 +56,8 @@ class Pix(ReveCube):
         else:
             raise ValueError("pix_dir does not exist")
 
+        self.image_name = os.path.basename(pix_dir).split(".")[0]
+
         # WISE radiometric data
 
         files = os.listdir(pix_dir)
@@ -180,6 +182,7 @@ class Pix(ReveCube):
         super().__init__(
             in_path=self.pix_f,
             in_ds=self.src_ds,
+            image_name=self.image_name,
             wavelength=self.wavelength,
             acq_time_z=self.acq_time_z,
             z=self.z,
@@ -189,7 +192,7 @@ class Pix(ReveCube):
             lon=self.lon,
             n_rows=self.n_rows,
             n_cols=self.n_cols,
-            affine=self.Affine,
+            Affine=self.Affine,
             crs=self.CRS,
         )
 
