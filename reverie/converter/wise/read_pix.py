@@ -75,7 +75,9 @@ class Pix(ReveCube):
 
         # Open the .pix file with GDAL
         self.src_ds = gdal.Open(self.pix_f)
-        logging.info(f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}")
+        logging.info(
+            f"Dataset open with GDAL driver: {self.src_ds.GetDriver().ShortName}"
+        )
 
         # Parse ENVI header
         self.header = helper.read_envi_hdr(hdr_f=self.hdr_f)
@@ -201,7 +203,7 @@ class Pix(ReveCube):
         self.cal_time(self.center_lon, self.center_lat)
 
         # Other instance attribute that need to be instanced before population by methods
-        # self._valid_mask = None
+        # self.valid_mask = None
 
         self.cal_sun_geom()
 
@@ -221,7 +223,7 @@ class Pix(ReveCube):
         so, we need to transfer the original viewing geometry to the georefernce grid using the georeference LUT
         :return:
         """
-        logging.debug('Calculating viewing geometry from glu files')
+        logging.debug("Calculating viewing geometry from glu files")
 
         if self.flightline is None:
             raise Exception("no flight line found")
@@ -314,24 +316,24 @@ class Pix(ReveCube):
         :param tile: an object of class tile.Tile()
         :return:
         """
-        if self._valid_mask is None:
+        if self.valid_mask is None:
             self.cal_valid_mask()
         if tile is None:
-            return self._valid_mask
+            return self.valid_mask
         else:
-            return self._valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+            return self.valid_mask[tile.sline: tile.eline, tile.spixl: tile.epixl]
 
     def cal_valid_mask(self):
         """
         Calculate the mask of valid pixel for the entire image (!= nodata)
-        :return: _valid_mask
+        :return: valid_mask
         """
-        if self._valid_mask is None:
+        if self.valid_mask is None:
             # TODO: Problem when the band read is flag in as bbl (bad band list),
             #   the mask contains only False. Should filter out the bbl bands.
             iband = 10
             radiance_at_sensor = self.read_band(iband)
-            self._valid_mask = radiance_at_sensor > 0
+            self.valid_mask = radiance_at_sensor > 0
 
     def to_reve_nc(self, out_file: str = None):
         """
@@ -358,6 +360,10 @@ class Pix(ReveCube):
             ),
             scale_factor=self.scale_factor,
         )
+
+        # Add optional bad_band_list to the variable attributes
+        self.out_ds.variables["radiance_at_sensor"].bad_band_list = self.header['bbl'].split(",  ")
+
         # self.n_bands = 1
         for band in tqdm(range(0, self.n_bands, 1), desc="Writing band: "):
             # GDAL use 1 base index
@@ -427,7 +433,7 @@ class Pix(ReveCube):
 
         # grid_mapping
         crs = self.CRS
-        print("Detected EPSG:" + str(crs.to_epsg()))
+        logging.info("Detected EPSG:" + str(crs.to_epsg()))
 
         # For GDAL
         # https://gdal.org/drivers/raster/zarr.html

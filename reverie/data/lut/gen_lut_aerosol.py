@@ -11,6 +11,29 @@ The LUT from acolite is used as a starting point:
     1.4, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8, 1.85, 1.9, 2., 2.05, 2.1,
     2.15, 2.2, 2.25, 2.3, 2.35, 2.4, 2.45, 2.5]
 
+            [
+            0.350,
+            0.400,
+            0.412,
+            0.443,
+            0.470,
+            0.488,
+            0.515,
+            0.550,
+            0.590,
+            0.633,
+            0.670,
+            0.694,
+            0.760,
+            0.860,
+            1.240,
+            1.536,
+            1.650,
+            1.950,
+            2.250,
+            3.750,
+        ],
+
 * 'azi' (relative azimuth [degree], size = 13):
     [0., 10., 20., 40., 60., 80., 90., 100., 120., 140., 160., 170., 180.]
 
@@ -101,8 +124,6 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     nc.createDimension("sol_zen", len(coords["sol_zen"]))
     nc.createDimension("view_zen", len(coords["view_zen"]))
     nc.createDimension("relative_azimuth", len(coords["relative_azimuth"]))
-    nc.createDimension("water", len(coords["water"]))
-    nc.createDimension("ozone", len(coords["ozone"]))
     nc.createDimension("target_pressure", len(coords["target_pressure"]))
     nc.createDimension("sensor_altitude", len(coords["sensor_altitude"]))
     nc.createDimension("wavelength", len(coords["wavelength"]))
@@ -207,56 +228,27 @@ if __name__ == "__main__":
         np.arange(0, 90, 50).tolist(),  # sun zenith
         np.arange(0, 70, 50).tolist(),  # view zenith
         np.arange(0, 180, 30).tolist(),  # relative azimuth
-        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
         [
-            0.0,
-            0.25,
+            0.001,
+            0.01,
+            0.02,
+            0.05,
+            0.1,
+            0.15,
+            0.2,
             0.3,
             0.5,
-            0.8,
-        ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
-        # aot550_dim = [
-        #     0.001,
-        #     0.01,
-        #     0.02,
-        #     0.05,
-        #     0.1,
-        #     0.15,
-        #     0.2,
-        #     0.3,
-        #     0.5,
-        #     0.7,
-        #     1,
-        #     1.3,
-        #     1.6,
-        #     2,
-        #     3,
-        #     5,
-        # ], # aot550
-        [750.0, 1013.0, 1100.0],  # pressure at target mb
+            0.7,
+            1,
+            1.3,
+            1.6,
+            2,
+            3,
+            5,
+        ],  # aot550
+        [500, 750.0, 1013.0, 1100.0],  # pressure at target mb
         [-0.5, -1, -3, -4],  # sensor altitude -km
-        [
-            0.350,
-            0.400,
-            0.412,
-            0.443,
-            0.470,
-            0.488,
-            0.515,
-            0.550,
-            0.590,
-            0.633,
-            0.670,
-            0.694,
-            0.760,
-            0.860,
-            1.240,
-            1.536,
-            1.650,
-            1.950,
-            2.250,
-            3.750,
-        ],
+        np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
     ]
 
     combination = cartesian_product(dimensions)

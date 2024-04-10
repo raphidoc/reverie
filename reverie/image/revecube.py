@@ -216,21 +216,23 @@ class ReveCube(ABC):
         # Sensor attribute store metadata from the sensor in a dictionary
         self.sensor = {}
 
-        # Additional attributes
+        # Optional attributes
         self.out_file = None
         self.out_ds = None
 
         self.no_data = None
-        self._valid_mask = None
-        # self.proj_var = None
-
-        # Geographic attributes
-        # self.lon_grid, self.lat_grid = None, None
-        # self.center_lon, self.center_lat = None, None
+        self.valid_mask = None
+        self.bad_band_list = None
 
         # Time attributes
         self.acq_time_local = None
         self.central_lon_local_timezone = None
+
+        # Coordinates attributes
+        self.center_lon = None
+        self.center_lat = None
+        self.lon_grid = None
+        self.lat_grid = None
 
         # Geometric attributes
         self.sun_zenith = None
@@ -241,11 +243,12 @@ class ReveCube(ABC):
 
         # Pixel location on the sensor array
         self.sample_index = None
+        # Scan line location on the image
         self.line_index = None
 
     def __str__(self):
         return f"""
-        Image from converter {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}
+        Image from sensor {self.sensor} acquired on {self.acq_time_z.strftime('%Y-%m-%d %H:%M:%SZ')}
         Central longitude: {self.center_lon:.3f}E
         Central latitude: {self.center_lat:.3f}N
         shape: x:{self.x.shape}, y:{self.y.shape}
@@ -371,24 +374,24 @@ class ReveCube(ABC):
         :return:[]
         """
         logging.debug("geting valid mask")
-        if self._valid_mask is None:
+        if self.valid_mask is None:
             self.cal_valid_mask()
         if tile is None:
-            return self._valid_mask
+            return self.valid_mask
         else:
-            return self._valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+            return self.valid_mask[tile.sline: tile.eline, tile.spixl: tile.epixl]
 
     def cal_valid_mask(self):
         """
         Calculate the mask of valid pixel for the entire image (!= nodata)
-        :return: _valid_mask
+        :return: valid_mask
         """
         logging.debug("calculating valid mask")
-        if self._valid_mask is None:
+        if self.valid_mask is None:
             # Select the first variable with dim (wavelength, y, x) to compute the valid mask
             for name, data in self.in_ds.data_vars.items():
                 if data.dims == ("wavelength", "y", "x"):
-                    self._valid_mask = data.isel(wavelength=5).notnull().data
+                    self.valid_mask = data.isel(wavelength=5).notnull().data
                     break
 
     def read_band(self, bandindex, tile: Tile = None):
@@ -406,7 +409,6 @@ class ReveCube(ABC):
         :return:
         The angle between the viewing and the sun azimuth retricted to 0 - 180 degree, 0 facing towards the sun and 180 facing away from the sun
         """
-        # TODO: verify the reference system for the azimuth angles in OSOAA, ATCOR
         # In ACOLTIE and 6S relative azimuth is defined as theta_s - theta_v in the range 0 - 180
         # if 0  then theta_s = theta_v, viewing is in the incidence direction of the sun ray, looking away from it
         # if 180 then viewing is in the opposite direction of the sun's ray, looking toward it
@@ -446,6 +448,7 @@ class ReveCube(ABC):
 
         # TODO validate that it follow the convention with cfdm / cf-python.
         #  For compatibility with GDAL NetCDF driver use CF-1.0
+        #  https://cfconventions.org/conventions.html
         nc_ds.Conventions = "CF-1.0"
         nc_ds.title = "Remote sensing image written by REVERIE"
         nc_ds.history = "File created on " + datetime.datetime.utcnow().strftime(
@@ -520,7 +523,7 @@ class ReveCube(ABC):
 
         # grid_mapping
         crs = self.CRS
-        print("Detected EPSG:" + str(crs.to_epsg()))
+        logging.info("Detected EPSG:" + str(crs.to_epsg()))
         cf_grid_mapping = crs.to_cf()
 
         grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())

@@ -5,7 +5,7 @@ import xarray as xr
 
 def interp_gmao(files, lon, lat, dt):
     """
-    Interpolates GMAO GEOS data from hourly files to image  lon, lat and time
+    Interpolates GMAO GEOS data from hourly files to image lon, lat and time
     Parameters
     ----------
     files
