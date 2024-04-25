@@ -39,7 +39,7 @@ def interp_gmao(files, lon, lat, dt):
         ds = ds.expand_dims("T")
         return ds
 
-    net_ds = xr.open_mfdataset(files, preprocess=prepro_gmao, parallel=False)
+    net_ds = xr.open_mfdataset(files, preprocess=prepro_gmao, parallel=False, engine="netcdf4")
 
     gmao_interp = net_ds.interp(lat=lat, lon=lon, T=dt.timestamp())
     gmao_interp = gmao_interp.compute()

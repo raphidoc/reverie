@@ -11,17 +11,17 @@ rho_sky_nc = nc.Dataset(
     format="NETCDF4",
 )
 
-insitu_data = pd.read_csv(
+data = pd.read_csv(
     "/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/radiance_at_sensor_rho_w_merged.csv"
 )
 
 # Convert relative azimuth to the 0 - 180 range
-for ix in range(0, len(insitu_data["relative_azimuth_mean"])):
-    if 0 <= insitu_data["relative_azimuth_mean"][ix] <= 180:
+for ix in range(0, len(data["relative_azimuth_mean"])):
+    if 0 <= data["relative_azimuth_mean"][ix] <= 180:
         continue
-    elif 180 < insitu_data["relative_azimuth_mean"][ix] <= 360:
-        insitu_data.loc[ix, ("relative_azimuth_mean")] = (
-            360 - insitu_data.loc[ix, ("relative_azimuth_mean")]
+    elif 180 < data["relative_azimuth_mean"][ix] <= 360:
+        data.loc[ix, ("relative_azimuth_mean")] = (
+                360 - data.loc[ix, ("relative_azimuth_mean")]
         )
     else:
         raise ValueError("relative azimuth is not in a valid 0 - 360 range")
@@ -40,17 +40,17 @@ res = sp.interpolate.interpn(
     ),
     values=rho_sky_nc.variables["lut"][:, :, :, :, :, :],
     xi=(
-        insitu_data["Wavelength"] * 1e-3,
-        insitu_data["relative_azimuth_mean"],
-        insitu_data["view_zenith_mean"],
-        insitu_data["sun_zenith_mean"],
-        2,
-        0.12,
+        data["Wavelength"] * 1e-3,
+        data["relative_azimuth_mean"],
+        data["view_zenith_mean"],
+        data["sun_zenith_mean"],
+        data["wind_speed_mean"],
+        data["aot550"],
     ),
 )
 
-insitu_data["rho_sky"] = res
-insitu_data.to_csv(
+data["rho_sky"] = res
+data.to_csv(
     path_or_buf="/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/radiance_at_sensor_rho_w_rho_sky_merged.csv"
 )
 

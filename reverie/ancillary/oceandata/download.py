@@ -17,7 +17,7 @@ def download(
     override=False,
     oceandata_url="https://oceandata.sci.gsfc.nasa.gov/ob/getfile/",
 ):
-    # TODO: use tempfile to manage temporary data or persistent save in processing dir ?
+    # TODO: persistent save GMAO data
 
     file_url = urllib.parse.urljoin(oceandata_url, anc_file)
 
@@ -37,6 +37,9 @@ def download(
 
         with requests.Session() as session:
             auth_rep = session.get(file_url, verify=True)
+            if (auth_rep.status_code != 200):
+                raise ValueError("Could not download file %s" % anc_file)
+
             data_rep = session.get(auth_rep.url, auth=auth, verify=True)
 
             with open(local_file, mode="wb") as file:

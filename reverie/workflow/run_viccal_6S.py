@@ -41,8 +41,9 @@ if __name__ == "__main__":
                 "0 # Geometrical conditions igeom",
                 "%(sol_zen).2f %(sol_azi).2f %(view_zen).2f %(view_azi).2f 1 1"
                 % kwargs,
-                # Atmospheric conditions, gas
-                "2 # Atmospheric conditions, gas (idatm)"
+                "8 ",  # Atmospheric conditions, gas (idatm)
+                "%(water_vapor)" % kwargs,  # water vapor in g/cm2
+                "%(ozone)" % kwargs,  # Ozone content (cm-atm),
                 # Aerosol type and concentration
                 "2 # Maritime aerosol model",
                 "0 # Visibility (km)",
