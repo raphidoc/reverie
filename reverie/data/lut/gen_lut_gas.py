@@ -165,17 +165,14 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     )
 
     nc.createVariable(
-        "tgv", "f4", dimensions, compression=compression, complevel=complevel
-    )
-    nc.createVariable(
-        "tgs", "f4", dimensions, compression=compression, complevel=complevel
+        "global_gas_trans_total", "f4", dimensions, compression=compression, complevel=complevel
     )
 
     return nc
 
 
 # Function to run model and accumulate results
-def run_model_and_accumulate(start, end, commands, tgv, tgs):
+def run_model_and_accumulate(start, end, commands, ggtt):
     global counter  # Declare counter as global
 
     for i in range(start, end):
@@ -184,8 +181,7 @@ def run_model_and_accumulate(start, end, commands, tgv, tgs):
 
         temp = json.loads(process.stdout)
 
-        tgv[i] = float(temp["global_gas_trans_upward"])
-        tgs[i] = float(temp["global_gas_trans_downward"])
+        ggtt[i] = float(temp["global_gas_trans_total"])
         counter += 1
 
     return
@@ -201,7 +197,31 @@ if __name__ == "__main__":
         return list(itertools.product(*dimensions))
 
     # TODO, run only for the 20 node wavelength of 6S
-    #  they use liner interpolation for the rest of the spectrun anyway
+    #  they use a linear interpolation for the rest of the spectrun anyway
+    # 20 node wavelength of 6s
+    wavelength = [
+        0.350,
+        0.400,
+        0.412,
+        0.443,
+        0.470,
+        0.488,
+        0.515,
+        0.550,
+        0.590,
+        0.633,
+        0.670,
+        0.694,
+        0.760,
+        0.860,
+        # 1.240,
+        # 1.536,
+        # 1.650,
+        # 1.950,
+        # 2.250,
+        # 3.750,
+    ]
+
     # Define your dimensions here
     dimensions = [
         np.arange(0, 90, 10).tolist(),  # sun zenith
@@ -224,8 +244,7 @@ if __name__ == "__main__":
 
     print("number of combination: ", len(combination))
 
-    tgv = [0] * len(combination)
-    tgs = [0] * len(combination)
+    ggtt = [0] * len(combination)
 
     # Create commands
     commands = []
@@ -285,7 +304,7 @@ if __name__ == "__main__":
             # Start the worker
             futures.append(
                 executor.submit(
-                    run_model_and_accumulate, start, end, commands, tgv, tgs
+                    run_model_and_accumulate, start, end, commands, ggtt
                 )
             )
 
@@ -333,11 +352,10 @@ if __name__ == "__main__":
     # Get the shape of the dimensions
     shape = [len(dimension) for dimension in dimensions]
 
-    tgs_reshaped = np.reshape(tgs, shape)
-    tgv_reshaped = np.reshape(tgv, shape)
+    ggtt_reshaped = np.reshape(ggtt, shape)
 
     # Write the results to the file
-    nc.variables["tgs"][
+    nc.variables["global_gas_trans_total"][
         :,
         :,
         :,
@@ -346,17 +364,6 @@ if __name__ == "__main__":
         :,
         :,
         :,
-    ] = tgs_reshaped
-
-    nc.variables["tgv"][
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-    ] = tgv_reshaped
+    ] = ggtt_reshaped
 
     nc.close()

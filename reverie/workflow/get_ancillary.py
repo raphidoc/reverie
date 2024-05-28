@@ -6,7 +6,7 @@ from reverie import ReveCube
 from reverie.ancillary import oceandata
 
 
-def ac_run(bundle_path: str = None, sensor: str = None):
+def add_ancillary(bundle_path: str = None, sensor: str = None):
     # l1_convert(bundle_path)
 
     l1 = ReveCube.from_reve_nc(

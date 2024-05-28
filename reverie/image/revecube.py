@@ -379,7 +379,7 @@ class ReveCube(ABC):
         if tile is None:
             return self.valid_mask
         else:
-            return self.valid_mask[tile.sline: tile.eline, tile.spixl: tile.epixl]
+            return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
 
     def cal_valid_mask(self):
         """
@@ -890,3 +890,47 @@ class ReveCube(ABC):
         extracted_line = extracted_line.to_dataframe()
 
         return extracted_line
+
+    def output_rgb(self):
+        xr_ds = self.in_ds
+
+        import matplotlib.pyplot as plt
+        from skimage import exposure
+
+        def adjust_gamma(img):
+            corrected = exposure.adjust_gamma(img, 1)
+            return corrected
+
+        def find_nearest(array, value):
+            array = np.asarray(array)
+            idx = (np.abs(array - value)).argmin()
+            return idx
+
+        560 - xr_ds["radiance_at_sensor"].coords["wavelength"]
+
+        find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
+
+        red_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
+        green_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 550)
+        blue_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 450)
+
+        red_array = xr_ds.isel(wavelength=red_band)["radiance_at_sensor"]
+        green_array = xr_ds.isel(wavelength=green_band)["radiance_at_sensor"]
+        blue_array = xr_ds.isel(wavelength=blue_band)["radiance_at_sensor"]
+
+        y_ticks, x_ticks = list(range(0, self.n_rows, 1000)), list(
+            range(0, self.n_cols, 1000)
+        )
+        cor_x, cor_y = helper.transform_xy(self.Affine, rows=y_ticks, cols=x_ticks)
+
+        rgb_data = np.zeros((red_array.shape[0], red_array.shape[1], 3), dtype=float)
+        rgb_data[:, :, 0] = red_array
+        rgb_data[:, :, 1] = green_array
+        rgb_data[:, :, 2] = blue_array
+        dst = adjust_gamma(rgb_data)
+        dst[~self.get_valid_mask()] = 1.0
+        # dst = rgb_data
+        plt.imshow(dst)
+        plt.xticks(ticks=x_ticks, labels=cor_x)
+        plt.yticks(ticks=y_ticks, labels=cor_y, rotation=90)
+        plt.show()
