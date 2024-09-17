@@ -66,7 +66,6 @@ import time
 
 import netCDF4
 import numpy as np
-from p_tqdm import p_uimap
 import json
 
 
@@ -165,7 +164,11 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     )
 
     nc.createVariable(
-        "global_gas_trans_total", "f4", dimensions, compression=compression, complevel=complevel
+        "global_gas_trans_total",
+        "f4",
+        dimensions,
+        compression=compression,
+        complevel=complevel,
     )
 
     return nc
@@ -196,47 +199,47 @@ if __name__ == "__main__":
     def cartesian_product(dimensions):
         return list(itertools.product(*dimensions))
 
-    # TODO, run only for the 20 node wavelength of 6S
-    #  they use a linear interpolation for the rest of the spectrun anyway
+    # TODO, run only for the 20 node wavelength of 6S ?
     # 20 node wavelength of 6s
-    wavelength = [
-        0.350,
-        0.400,
-        0.412,
-        0.443,
-        0.470,
-        0.488,
-        0.515,
-        0.550,
-        0.590,
-        0.633,
-        0.670,
-        0.694,
-        0.760,
-        0.860,
-        # 1.240,
-        # 1.536,
-        # 1.650,
-        # 1.950,
-        # 2.250,
-        # 3.750,
-    ]
+    # wavelength = [
+    #     0.350,
+    #     0.400,
+    #     0.412,
+    #     0.443,
+    #     0.470,
+    #     0.488,
+    #     0.515,
+    #     0.550,
+    #     0.590,
+    #     0.633,
+    #     0.670,
+    #     0.694,
+    #     0.760,
+    #     0.860,
+    #     # 1.240,
+    #     # 1.536,
+    #     # 1.650,
+    #     # 1.950,
+    #     # 2.250,
+    #     # 3.750,
+    # ]
 
     # Define your dimensions here
+    # Reduced dimension to work with ACI12 only
     dimensions = [
-        np.arange(0, 90, 10).tolist(),  # sun zenith
-        np.arange(0, 70, 10).tolist(),  # view zenith
-        np.arange(0, 180, 30).tolist(),  # relative azimuth
-        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
+        np.arange(30, 41, 10).tolist(),  # sun zenith
+        np.arange(0, 21, 10).tolist(),  # view zenith
+        np.arange(80, 101, 10).tolist(),  # relative azimuth
         [
-            0.0,
-            0.25,
+            1.0,
+            1.5,
+        ],  # [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
+        [
             0.3,
             0.5,
-            0.8,
         ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
-        [750.0, 1013.0, 1100.0],  # pressure at target mb
-        [-0.5, -1, -3, -4],  # sensor altitude -km
+        [750.0, 1013.0],  # pressure at target mb
+        [-3, -4],  # sensor altitude -km
         np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
     ]
 
@@ -286,6 +289,8 @@ if __name__ == "__main__":
     # Calculate the number of iterations per worker
     iterations_per_worker = len(combination) // num_workers
 
+    print(f"{iterations_per_worker} iteration per worker")
+
     start_time = time.perf_counter()
 
     # Create a ThreadPoolExecutor
@@ -303,9 +308,7 @@ if __name__ == "__main__":
 
             # Start the worker
             futures.append(
-                executor.submit(
-                    run_model_and_accumulate, start, end, commands, ggtt
-                )
+                executor.submit(run_model_and_accumulate, start, end, commands, ggtt)
             )
 
         while counter < len(combination):
@@ -347,7 +350,7 @@ if __name__ == "__main__":
             "wavelength": dimensions[7],
         }
 
-    nc = create_gas_output_nc(os.path.join(output_dir, "test_gas.nc"), coords)
+    nc = create_gas_output_nc(os.path.join(output_dir, "ACI12_gas.nc"), coords)
 
     # Get the shape of the dimensions
     shape = [len(dimension) for dimension in dimensions]

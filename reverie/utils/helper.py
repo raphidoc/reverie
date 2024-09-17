@@ -64,7 +64,7 @@ def fwhm_2_rsr(fwhm, centers, resolution, wrange=(200, 2000), model="gaussian"):
     """
     # resolution, wrange = 0.01, (_waves[0],_waves[-1]+0.0001)
 
-    x = np.arange(wrange[0], wrange[1], resolution)
+    wave = np.arange(wrange[0], wrange[1], resolution)
     if model == "gaussian":
         ##let's use Gaussian funcrion f=a*exp[-(x-b)^2/2c^2] to simulate RSR (relative spectral response)
         ##since Maximum of RSR is 1, a is set to 1.
@@ -72,10 +72,10 @@ def fwhm_2_rsr(fwhm, centers, resolution, wrange=(200, 2000), model="gaussian"):
         ### https://en.wikipedia.org/wiki/Full_width_at_half_maximum
         ### http://blog.sina.com.cn/s/blog_4a1c6f7f0100061m.html
         cs = [fwmh / 2.0 / np.sqrt(2 * np.log(2)) for fwmh in fwhm]
-        rsr = [np.exp(-np.power(x - b, 2) / (2 * c**2)) for c, b in zip(cs, centers)]
+        rsr = [np.exp(-np.power(wave - b, 2) / (2 * c**2)) for c, b in zip(cs, centers)]
     else:
         return None
-    return rsr, x
+    return rsr, wave
 
 
 def parse_mapinfo(mapinfo):
@@ -320,7 +320,7 @@ def cal_solar_zenith_azimuth(latitude, hour_angle, declination):
 def findLocalTimeZone(longitude, latitude):
     timezone_local_name = TimezoneFinder().timezone_at(lng=longitude, lat=latitude)
 
-    if timezone_local_name not in pendulum.timezones:
+    if timezone_local_name not in pendulum.timezones():
         print(
             "{} can not be recongnized as pendulum.timezones".format(
                 timezone_local_name

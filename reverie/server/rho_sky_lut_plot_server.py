@@ -1,5 +1,6 @@
 import xarray as xr
 import numpy as np
+import netCDF4 as nc
 
 from bokeh.models import Slider
 from bokeh.plotting import figure, curdoc
@@ -8,8 +9,15 @@ from bokeh.layouts import row, column
 import scipy as sp
 
 rho_sky_nc = xr.open_dataset(
-    "/D/Documents/PhD/Thesis/Chapter2/Data/ACOLITE-RSKY-202102-82W-MOD2.nc"
+    filename_or_obj="/D/Documents/phd/thesis/2_chapter/data/ACOLITE-RSKY-202102-82W-MOD2.nc",
+    engine='netcdf4'
 )
+
+# rho_sky_nc = nc.Dataset(
+#     "/D/Documents/phd/thesis/2_chapter/data/ACOLITE-RSKY-202102-82W-MOD2.nc",
+#     "r",
+#     format="NETCDF4",
+# )
 
 new_rho_sky_nc = xr.Dataset(
     data_vars=dict(

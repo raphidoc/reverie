@@ -1,5 +1,4 @@
-from datetime import datetime
-
+import datetime
 import xarray as xr
 
 
@@ -31,17 +30,20 @@ def interp_gmao(files, lon, lat, dt):
         """
         ds = ds.assign_coords(
             {
-                "T": datetime.strptime(
+                "T": datetime.datetime.strptime(
                     ds.time_coverage_start, "%Y-%m-%dT%H:%M:%SZ"
-                ).timestamp()
+                ).replace(tzinfo=datetime.timezone.utc).timestamp()
             }
         )
         ds = ds.expand_dims("T")
         return ds
 
-    net_ds = xr.open_mfdataset(files, preprocess=prepro_gmao, parallel=False, engine="netcdf4")
+    net_ds = xr.open_mfdataset(
+        files, preprocess=prepro_gmao, parallel=False, engine="netcdf4"
+    )
 
-    gmao_interp = net_ds.interp(lat=lat, lon=lon, T=dt.timestamp())
+    # Strange bug with type error numpy.float64 since saved lat lon as f8 in nc L1 conversion
+    gmao_interp = net_ds.interp(lat=float(lat), lon=float(lon), T=dt.timestamp())
     gmao_interp = gmao_interp.compute()
 
     # interpolate for the whole image

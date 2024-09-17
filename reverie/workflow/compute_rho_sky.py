@@ -54,5 +54,5 @@ data.to_csv(
     path_or_buf="/D/Documents/PhD/Thesis/Chapter2/Data/WISE/pixex/radiance_at_sensor_rho_w_rho_sky_merged.csv"
 )
 
-if __name__ == "__name__":
+if __name__ == "__main__":
     pass

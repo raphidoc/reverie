@@ -18,6 +18,7 @@ import xarray as xr
 import math
 import zarr
 import affine
+from rasterio.windows import Window
 
 # REVERIE import
 from reverie.utils import helper, astronomy
@@ -140,8 +141,15 @@ class ReveCube(ABC):
         #     time_var.data[0] - np.datetime64("1970-01-01T00:00:00Z")
         # ) / np.timedelta64(1, "s")
         # TODO: better define acq_time_z as image center datetime,
-        #  also is this should be decoded by xarray or not ?
-        acq_time_z = datetime.datetime.utcfromtimestamp(time_var.data[0])
+        #  also should it be decoded by xarray or not ?
+        # For some reason utcfromtimestamp doesn't carry tz info (acutally UTC is not a timezone, GMT is the timezone)
+        # It create a problem if the data loaded by panda follow the iso8601 format.
+        # In that case the datetime object will have a utc timezone.
+        # We cannot make comutation on timezone aware and not aware.
+        # It's best to force the timezone to be utc and to let the user actually deal with the data provided to the app.
+        acq_time_z = datetime.datetime.utcfromtimestamp(time_var.data[0]).replace(
+            tzinfo=datetime.timezone.utc
+        )
         altitude_var = in_ds.variables["z"]
         z = altitude_var[:][0]
         y = in_ds.variables["y"][:].data
@@ -373,13 +381,14 @@ class ReveCube(ABC):
         :param tile: an object of class tile.Tile()
         :return:[]
         """
-        logging.debug("geting valid mask")
+        # logging.debug("geting valid mask")
         if self.valid_mask is None:
             self.cal_valid_mask()
         if tile is None:
             return self.valid_mask
         else:
-            return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+            #return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+            return self.valid_mask[tile.spixl : tile.epixl, tile.sline : tile.eline]
 
     def cal_valid_mask(self):
         """
@@ -391,7 +400,8 @@ class ReveCube(ABC):
             # Select the first variable with dim (wavelength, y, x) to compute the valid mask
             for name, data in self.in_ds.data_vars.items():
                 if data.dims == ("wavelength", "y", "x"):
-                    self.valid_mask = data.isel(wavelength=5).notnull().data
+                    # TODO: some bands might be full of NA, refer to attribute bad_band_list
+                    self.valid_mask = data.isel(wavelength=50).notnull().data
                     break
 
     def read_band(self, bandindex, tile: Tile = None):
@@ -477,7 +487,7 @@ class ReveCube(ABC):
 
         # Create coordinate variables
         # We will store time as seconds since 1 january 1970 good luck people of 2038 :) !
-        t_var = nc_ds.createVariable("time", "f4", ("time",))
+        t_var = nc_ds.createVariable("time", "f8", ("time",))
         t_var.standard_name = "time"
         t_var.long_name = "UTC acquisition time of remote sensing image"
         # CF convention for time zone is UTC if ommited
@@ -486,7 +496,7 @@ class ReveCube(ABC):
         t_var.calendar = "gregorian"
         t_var[:] = self.acq_time_z.timestamp()
 
-        z_var = nc_ds.createVariable("z", "f4", ("z",))
+        z_var = nc_ds.createVariable("z", "f8", ("z",))
         z_var.units = "m"
         z_var.standard_name = "altitude"
         z_var.long_name = (
@@ -495,27 +505,27 @@ class ReveCube(ABC):
         z_var.axis = "z"
         z_var[:] = self.z
 
-        y_var = nc_ds.createVariable("y", "f4", ("y",))
+        y_var = nc_ds.createVariable("y", "f8", ("y",))
         y_var.units = "m"
         y_var.standard_name = "projection_y_coordinate"
         y_var.long_name = "y-coordinate in projected coordinate system"
         y_var.axis = "y"
         y_var[:] = self.y
 
-        lat_var = nc_ds.createVariable("lat", "f4", ("y",))
+        lat_var = nc_ds.createVariable("lat", "f8", ("y",))
         lat_var.standard_name = "latitude"
         lat_var.units = "degrees_north"
         # lat_var.long_name = 'latitude'
         lat_var[:] = self.lat
 
-        x_var = nc_ds.createVariable("x", "f4", ("x",))
+        x_var = nc_ds.createVariable("x", "f8", ("x",))
         x_var.units = "m"
         x_var.standard_name = "projection_x_coordinate"
         x_var.long_name = "x-coordinate in projected coordinate system"
         x_var.axis = "x"
         x_var[:] = self.x
 
-        lon_var = nc_ds.createVariable("lon", "f4", ("x",))
+        lon_var = nc_ds.createVariable("lon", "f8", ("x",))
         lon_var.standard_name = "longitude"
         lon_var.units = "degrees_east"
         # lon_var.long_name = 'longitude'
@@ -527,6 +537,22 @@ class ReveCube(ABC):
         cf_grid_mapping = crs.to_cf()
 
         grid_mapping = nc_ds.createVariable("grid_mapping", np.int32, ())
+
+        # Fix GDAL projection issue by providing the attributes spatial_ref and GeoTranform
+        # GeoTransform is an affine transform array defined by GDAL with parameters in the orders:
+        GT0 = 541107.0  # x coordinate of the upper-left corner of the upper-left pixel
+        GT1 = 1.5  # w-e pixel resolution / pixel width.
+        GT2 = 0  # row rotation (typically zero).
+        GT3 = (
+            5438536.5  # y-coordinate of the upper-left corner of the upper-left pixel.
+        )
+        GT4 = 0  # column rotation (typically zero).
+        GT5 = 1.5  # n-s pixel resolution / pixel height (negative value for a north-up image).
+        #
+        # raise "Implement this first !"
+
+        grid_mapping.spatial_ref = cf_grid_mapping["crs_wkt"]
+        grid_mapping.GeoTransform = f"{GT0} {GT1} {GT2} {GT3} {GT4} {GT5}"
 
         grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
         grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
@@ -666,6 +692,29 @@ class ReveCube(ABC):
         # TODO: write a reve cube to a zarr store
         pass
 
+    def get_footprint(self):
+
+        import rasterio.features
+        from shapely.geometry import shape
+
+        # Filter observation outside the image valid_mask
+        valid_mask = self.get_valid_mask()
+
+        # Convert the valid_mask to list of polygon(s)
+        polygons = [
+            shape(geom)
+            for geom, value in rasterio.features.shapes(
+                valid_mask.astype("int16"), mask=valid_mask, transform=self.Affine
+            )
+            if value == 1
+        ]
+
+        # Convert the list of polygons to a GeoDataFrame
+        footprint_gdf = gpd.GeoDataFrame(geometry=polygons, crs=self.CRS.to_epsg())
+
+        return footprint_gdf
+
+
     def extract_pixel(
         self,
         matchup_file: str = None,
@@ -703,16 +752,16 @@ class ReveCube(ABC):
 
         matchup_gdf = pd.read_csv(matchup_file)
         matchup_gdf.columns = matchup_gdf.columns.str.lower()
-        matchup_gdf = matchup_gdf[["datetime", "lat", "lon", "uuid"]]
+        matchup_gdf = matchup_gdf[["date_time", "lat", "lon", "uuid"]]
 
         # When matchup data is in long format (wavelength along the rows), keep unique observation
         matchup_gdf = matchup_gdf.drop_duplicates()
 
         # Filter observation outside requested time range
         if max_time_diff:
-            matchup_gdf["datetime"] = pd.to_datetime(matchup_gdf["datetime"])
+            matchup_gdf["date_time"] = pd.to_datetime(matchup_gdf["date_time"], utc=True)
             matchup_gdf = matchup_gdf[
-                abs(matchup_gdf["datetime"] - self.acq_time_z)
+                abs(matchup_gdf["date_time"] - self.acq_time_z)
                 < pd.Timedelta(max_time_diff, unit="h")
             ]
             logging.info(
@@ -732,38 +781,43 @@ class ReveCube(ABC):
         logging.info(f"Projecting in-situ data to EPSG: {self.CRS.to_epsg()}")
         matchup_gdf = matchup_gdf.to_crs(self.CRS.to_epsg())
 
-        import rasterio.features
-        from shapely.geometry import shape
-
-        # Filter observation outside the image valid_mask
-        valid_mask = self.get_valid_mask()
-
-        # Convert the valid_mask to list of polygon(s)
-        polygons = [
-            shape(geom)
-            for geom, value in rasterio.features.shapes(
-                valid_mask.astype("int16"), mask=valid_mask, transform=self.Affine
-            )
-            if value == 1
-        ]
-
-        # Convert the list of polygons to a GeoDataFrame
-        footprint_gdf = gpd.GeoDataFrame(geometry=polygons, crs=matchup_gdf.crs)
-
-        # Write the GeoDataFrame to a GeoJSON file
-        # footprint_gdf.to_file("footprint.geojson", driver="GeoJSON")
+        # import rasterio.features
+        # from shapely.geometry import shape
+        #
+        # # Filter observation outside the image valid_mask
+        # valid_mask = self.get_valid_mask()
+        #
+        # # Convert the valid_mask to list of polygon(s)
+        # polygons = [
+        #     shape(geom)
+        #     for geom, value in rasterio.features.shapes(
+        #         valid_mask.astype("int16"), mask=valid_mask, transform=self.Affine
+        #     )
+        #     if value == 1
+        # ]
+        #
+        # # Convert the list of polygons to a GeoDataFrame
+        # footprint_gdf = gpd.GeoDataFrame(geometry=polygons, crs=matchup_gdf.crs)
+        #
+        # # Write the GeoDataFrame to a GeoJSON file
+        # # footprint_gdf.to_file("footprint.geojson", driver="GeoJSON")
 
         # Step 3: Perform a spatial join between the matchup_gdf and the polygons_gdf
+        footprint_gdf = self.get_footprint()
+
         filtered_gdf = gpd.sjoin(
             matchup_gdf, footprint_gdf, how="inner", predicate="intersects"
         )
 
-        logging.info("%s" % len(filtered_gdf))
+        logging.info("%s observation remaining after spatial filtering" % len(filtered_gdf))
 
         if len(filtered_gdf) == 0:
             raise Exception("no matchup data remaining after spatial filter")
 
         pixex_df = pd.DataFrame()
+        window_dict = {}
+        window_data = {}
+
         for uuid in tqdm(filtered_gdf["uuid"]):
             temp_gdf = filtered_gdf[filtered_gdf["uuid"] == uuid].reset_index()
 
@@ -795,6 +849,13 @@ class ReveCube(ABC):
             data_sel = xr_ds.isel(
                 y=slice(max(0, y_index - half_window), y_index + half_window + 1),
                 x=slice(max(0, x_index - half_window), x_index + half_window + 1),
+            )
+
+            window_data[uuid] = data_sel
+
+            window_dict[uuid] = Window.from_slices(
+                cols=slice(max(0, y_index - half_window), y_index + half_window + 1),
+                rows=slice(max(0, x_index - half_window), x_index + half_window + 1),
             )
 
             # import holoviews as hv
@@ -857,7 +918,7 @@ class ReveCube(ABC):
 
             pixex_df = pd.concat([pixex_df, temp_pixex_df], axis=0)
 
-        return pixex_df
+        return pixex_df, window_dict, window_data
 
     def extract_pixel_line(self, line_index: int, line_window: int):
         xr_ds = self.in_ds

@@ -359,7 +359,7 @@ if __name__ == "__main__":
             "wavelength": dimensions[7],
         }
 
-    nc = create_gas_output_nc(os.path.join(output_dir, "test_gas.nc"), coords)
+    nc = create_gas_output_nc(os.path.join(output_dir, "ACI12_gas.nc"), coords)
 
     # Get the shape of the dimensions
     shape = [len(dimension) for dimension in dimensions]
