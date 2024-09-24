@@ -1,20 +1,18 @@
-import math
 import os
 
 import pandas
 import xarray as xr
-import netCDF4 as nc
 import pandas as pd
 import numpy as np
 import scipy.interpolate as sp
 from tqdm import tqdm
 import math
+import netCDF4 as nc
 
 from reverie import ReveCube
 from reverie.image.tile import Tile
 from reverie.utils.helper import fwhm_2_rsr
-
-import matplotlib.pyplot as plt
+from reverie.lut import z17
 
 import logging
 
@@ -135,7 +133,7 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
     window_dict = l1.extract_pixel(
         insitu_path,
         max_time_diff=12,
-        window_size=20,
+        window_size=7,
     )[1]
 
     logging.info(f"Extracted window {window_dict.keys}")
@@ -371,8 +369,6 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
 
 ######### Rho sky z19
 
-        import zhang_rho as z17
-
         rho_z17 = z17.get_sky_sun_rho(
             aot_550=float(image_sub.variables["aerosol_optical_thickness_at_555_nm"].mean().values),
             sun_zen=float(image_sub.variables["sun_zenith"].mean().values),
@@ -383,20 +379,43 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
             wind_speed=float(image_sub.variables["wind_speed"].mean().values)
         )
 
-        temp = rho_z17["sky"]
-
+        sky = rho_z17["sky"]
         # Add two new dimensions to temp
-        temp_3d = temp[:, np.newaxis, np.newaxis]
+        sky_3d = sky[:, np.newaxis, np.newaxis]
 
         # Repeat temp along the new dimensions
-        temp_3d = np.repeat(temp_3d, len(y), axis=1)
-        temp_3d = np.repeat(temp_3d, len(x), axis=2)
+        sky_3d = np.repeat(sky_3d, len(y), axis=1)
+        sky_3d = np.repeat(sky_3d, len(x), axis=2)
+
+        sun = rho_z17["sun"]
+        # Add two new dimensions to temp
+        sun_3d = sun[:, np.newaxis, np.newaxis]
+
+        # Repeat temp along the new dimensions
+        sun_3d = np.repeat(sun_3d, len(y), axis=1)
+        sun_3d = np.repeat(sun_3d, len(x), axis=2)
+
+        rho = rho_z17["rho"]
+        # Add two new dimensions to temp
+        rho_3d = rho[:, np.newaxis, np.newaxis]
+
+        # Repeat temp along the new dimensions
+        rho_3d = np.repeat(rho_3d, len(y), axis=1)
+        rho_3d = np.repeat(rho_3d, len(x), axis=2)
 
         rho_sky = xr.Dataset(
             data_vars=dict(
                 rho_sky=(
                     ["wavelength", "y", "x"],
-                    temp_3d,
+                    sky_3d,
+                ),
+                rho_sun=(
+                    ["wavelength", "y", "x"],
+                    sun_3d,
+                ),
+                rho=(
+                    ["wavelength", "y", "x"],
+                    rho_3d,
                 ),
             ),
             coords=dict(
@@ -421,10 +440,14 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
         #         x=("x", x),
         #     ),
         # )
+        #
+        # # rho_sky_nc = xr.open_dataset(
+        # #     filename_or_obj="/D/Documents/phd/thesis/2_chapter/data/ACOLITE-RSKY-202102-82W-MOD2.nc",
+        # #     engine='netcdf4'
+        # # )
+        #
         # rho_sky_nc = nc.Dataset(
-        #     "/D/Documents/phd/thesis/2_chapter/data/lut/ACOLITE-RSKY-202102-82W-MOD2.nc",
-        #     "r",
-        #     format="NETCDF4",
+        #     "/D/Documents/phd/thesis/2_chapter/data/ACOLITE-RSKY-202102-82W-MOD2.nc"
         # )
         #
         # # Compute sea surface reflection from the ACOLITE Lut (OSOAA model)
@@ -465,9 +488,16 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
         #             rho_sky_nc.ths[()],
         #             rho_sky_nc.wind[()],
         #             rho_sky_nc.tau[()],
+        #             # rho_sky_nc.attrs["wave"],
+        #             # rho_sky_nc.attrs["azi"],
+        #             # rho_sky_nc.attrs["thv"],
+        #             # rho_sky_nc.attrs["ths"],
+        #             # rho_sky_nc.attrs["wind"],
+        #             # rho_sky_nc.attrs["tau"]
         #         ),
         #         values=rho_sky_nc.variables["lut"][:, :, :, :, :, :],
         #         xi=xi,
+        #         method="linear"
         #     )
         #
         #     sr[l1.get_valid_mask(tile=tile)] = sea_rho
@@ -612,7 +642,7 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size):
 
 if __name__ == "__main__":
     # insitu data
-    insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/hypercp_rrs.csv"
+    insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/viccal_rrs.csv"
     in_situ = pd.read_csv(insitu_path)
 
     image_dir = "/D/Data/WISE/"

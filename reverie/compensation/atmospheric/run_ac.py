@@ -13,6 +13,7 @@ import math
 from reverie import ReveCube
 from reverie.image.tile import Tile
 from reverie.utils.helper import fwhm_2_rsr
+from reverie.lut import z17
 
 import matplotlib.pyplot as plt
 
@@ -44,6 +45,8 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
     image = l1.in_ds
     # filter image for bad bands
     bad_band_list = image["radiance_at_sensor"].bad_band_list
+    if isinstance(bad_band_list, str):
+        bad_band_list = str.split(bad_band_list, ", ")
     bad_band_list = np.array(bad_band_list)
     good_band_indices = np.where(bad_band_list == "1")[0]
     good_bands_slice = slice(min(good_band_indices), max(good_band_indices) + 1)
@@ -132,7 +135,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
     # find the window on which we do the cal/val
     window_dict = l1.extract_pixel(
         insitu_path,
-        max_time_diff=3.0,
+        max_time_diff=12,
         window_size=7,
     )[1]
 
@@ -322,7 +325,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
 
             pr[l1.get_valid_mask(tile=tile)] = pr_values
 
-            atmosphere_components["atmospheric_reflectance_at_sensor"][index, :, :] = pr
+            atmosphere_components["path_reflectance"][index, :, :] = pr
 
             gt_values = sp.interpn(
                 points=points,
@@ -471,17 +474,55 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
         #
         #     up_trans["spherical_albedo"][index, :, :] = sa
 
-        rho_sky_nc = nc.Dataset(
-            "/D/Documents/PhD/Thesis/3_Chapter2/Data/ACOLITE-RSKY-202102-82W-MOD2.nc",
-            "r",
-            format="NETCDF4",
+        ######## Rho sky Zhang 17
+
+        rho_z17 = z17.get_sky_sun_rho(
+            aot_550=float(image_sub.variables["aerosol_optical_thickness_at_555_nm"].mean().values),
+            sun_zen=float(image_sub.variables["sun_zenith"].mean().values),
+            view_ang=[float(image_sub.variables["view_zenith"].mean().values), float(image_sub.variables["relative_azimuth"].mean().values)],
+            water_salinity=30,
+            water_temperature=17,
+            wavelength=wavelength,
+            wind_speed=float(image_sub.variables["wind_speed"].mean().values)
         )
+
+        sky = rho_z17["sky"]
+        # Add two new dimensions to temp
+        sky_3d = sky[:, np.newaxis, np.newaxis]
+
+        # Repeat temp along the new dimensions
+        sky_3d = np.repeat(sky_3d, len(y), axis=1)
+        sky_3d = np.repeat(sky_3d, len(x), axis=2)
+
+        sun = rho_z17["sun"]
+        # Add two new dimensions to temp
+        sun_3d = sun[:, np.newaxis, np.newaxis]
+
+        # Repeat temp along the new dimensions
+        sun_3d = np.repeat(sun_3d, len(y), axis=1)
+        sun_3d = np.repeat(sun_3d, len(x), axis=2)
+
+        rho = rho_z17["rho"]
+        # Add two new dimensions to temp
+        rho_3d = rho[:, np.newaxis, np.newaxis]
+
+        # Repeat temp along the new dimensions
+        rho_3d = np.repeat(rho_3d, len(y), axis=1)
+        rho_3d = np.repeat(rho_3d, len(x), axis=2)
 
         rho_sky = xr.Dataset(
             data_vars=dict(
                 rho_sky=(
                     ["wavelength", "y", "x"],
-                    np.full((len(wavelength), len(y), len(x)), np.nan, float),
+                    sky_3d,
+                ),
+                rho_sun=(
+                    ["wavelength", "y", "x"],
+                    sun_3d,
+                ),
+                rho=(
+                    ["wavelength", "y", "x"],
+                    rho_3d,
                 ),
             ),
             coords=dict(
@@ -491,52 +532,73 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
             ),
         )
 
-        # Compute sea surface reflection from the ACOLITE Lut (OSOAA model)
+########## Rho sky OSOAA
 
-        sr = np.full(l1.get_valid_mask(tile=tile).shape, np.nan, float)
-
-        for index, band in enumerate(wavelength):
-            xi = np.hstack(
-                [
-                    np.repeat(band * 1e-3, n_pixels).reshape(-1, 1),
-                    image_sub.variables["relative_azimuth"]
-                    .values[l1.get_valid_mask(tile=tile)]
-                    .reshape(-1, 1),
-                    image_sub.variables["view_zenith"]
-                    .values[l1.get_valid_mask(tile=tile)]
-                    .reshape(-1, 1),
-                    image_sub.variables["sun_zenith"]
-                    .values[l1.get_valid_mask(tile=tile)]
-                    .reshape(-1, 1),
-                    np.repeat(
-                        image_sub.variables["wind_speed"].values,
-                        n_pixels,
-                    ).reshape(-1, 1),
-                    np.repeat(
-                        image_sub.variables[
-                            "aerosol_optical_thickness_at_555_nm"
-                        ].values,
-                        n_pixels,
-                    ).reshape(-1, 1),
-                ]
-            )
-
-            sea_rho = sp.interpn(
-                points=(
-                    rho_sky_nc.wave[()],
-                    rho_sky_nc.azi[()],
-                    rho_sky_nc.thv[()],
-                    rho_sky_nc.ths[()],
-                    rho_sky_nc.wind[()],
-                    rho_sky_nc.tau[()],
-                ),
-                values=rho_sky_nc.variables["lut"][:, :, :, :, :, :],
-                xi=xi,
-            )
-
-            sr[l1.get_valid_mask(tile=tile)] = sea_rho
-
-            rho_sky["rho_sky"][index, :, :] = sr
+        # rho_sky_nc = nc.Dataset(
+        #     "/D/Documents/phd/thesis/2_chapter/data/ACOLITE-RSKY-202102-82W-MOD2.nc"
+        # )
+        #
+        # rho_sky = xr.Dataset(
+        #     data_vars=dict(
+        #         rho_sky=(
+        #             ["wavelength", "y", "x"],
+        #             np.full((len(wavelength), len(y), len(x)), np.nan, float),
+        #         ),
+        #     ),
+        #     coords=dict(
+        #         wavelength=wavelength,
+        #         y=("y", y),
+        #         x=("x", x),
+        #     ),
+        # )
+        #
+        # # Compute sea surface reflection from the ACOLITE Lut (OSOAA model)
+        #
+        # sr = np.full(l1.get_valid_mask(tile=tile).shape, np.nan, float)
+        #
+        # for index, band in enumerate(wavelength):
+        #     xi = np.hstack(
+        #         [
+        #             np.repeat(band * 1e-3, n_pixels).reshape(-1, 1),
+        #             image_sub.variables["relative_azimuth"]
+        #             .values[l1.get_valid_mask(tile=tile)]
+        #             .reshape(-1, 1),
+        #             image_sub.variables["view_zenith"]
+        #             .values[l1.get_valid_mask(tile=tile)]
+        #             .reshape(-1, 1),
+        #             image_sub.variables["sun_zenith"]
+        #             .values[l1.get_valid_mask(tile=tile)]
+        #             .reshape(-1, 1),
+        #             np.repeat(
+        #                 image_sub.variables["wind_speed"].values,
+        #                 n_pixels,
+        #             ).reshape(-1, 1),
+        #             np.repeat(
+        #                 image_sub.variables[
+        #                     "aerosol_optical_thickness_at_555_nm"
+        #                 ].values,
+        #                 n_pixels,
+        #             ).reshape(-1, 1),
+        #         ]
+        #     )
+        #
+        #     sea_rho = sp.interpn(
+        #         points=(
+        #             rho_sky_nc.wave[()],
+        #             rho_sky_nc.azi[()],
+        #             rho_sky_nc.thv[()],
+        #             rho_sky_nc.ths[()],
+        #             rho_sky_nc.wind[()],
+        #             rho_sky_nc.tau[()],
+        #         ),
+        #         values=rho_sky_nc.variables["lut"][:, :, :, :, :, :],
+        #         xi=xi,
+        #         method="cubic"
+        #     )
+        #
+        #     sr[l1.get_valid_mask(tile=tile)] = sea_rho
+        #
+        #     rho_sky["rho_sky"][index, :, :] = sr
 
         total_trans = (
             atmosphere_components["gas_trans_total"]
@@ -546,8 +608,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
 
         spherical_albedo = atmosphere_components["spherical_albedo_total"]
 
-        rho_path = atmosphere_components["atmospheric_reflectance_at_sensor"]
-
+        rho_path = atmosphere_components["path_reflectance"]
 
         gain_values = gain["gain_mean"]
         gain_wavelength = gain["wavelength"]
@@ -591,7 +652,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
         # plt.show()
 
         rho_t = (math.pi * image_sub["radiance_at_sensor"]) / (F0_image["F0"] * np.cos(np.deg2rad(image_sub["sun_zenith"])))
-        rho_t_cal = rho_t #rho_t * gain_image["gain"]
+        rho_t_cal = rho_t * gain_image["gain"]
 
         # rho_t.mean(["x", "y"]).plot()
         # rho_t_cal.mean(["x", "y"]).plot()
@@ -625,23 +686,36 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
 
 
 if __name__ == "__main__":
-    l1 = ReveCube.from_reve_nc(
-        "/D/Data/WISE/ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc"
-    )
+    image_dir = "/D/Data/WISE/"
 
-    # insitu data
-    insitu_path = "/D/Documents/PhD/Thesis/3_Chapter2/Data/WISE/Match_BG_20220705.csv"
-    in_situ = pd.read_csv(insitu_path)
+    images = [
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
+        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
+        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
+        # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
+        # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
+        # "MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc",
+    ]
 
-    gain = pd.read_csv(
-        "/D/Documents/PhD/Thesis/3_Chapter2/Data/WISE/viccal/final_gain.csv"
-    )
+    for image in images:
+        l1 = ReveCube.from_reve_nc(os.path.join(image_dir, image))
 
-    ac_matchup = run_ac(l1, in_situ, 7, gain)
+        # insitu data
+        insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/match_bg_20220705.csv"
+        # insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/viccal_rrs.csv"
+        in_situ = pd.read_csv(insitu_path)
 
-    ac_matchup.to_csv(
-        os.path.join(
-            "/D/Documents/PhD/Thesis/3_Chapter2/Data/WISE/viccal/",
-            f"{l1.image_name}_rho_w_L2_uncalibrated.csv",
+        gain = pd.read_csv(
+            "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/gain_final.csv"
         )
-    )
+
+        ac_matchup = run_ac(l1, in_situ, 7, gain)
+
+        ac_matchup.to_csv(
+            os.path.join(
+                "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/",
+                f"{l1.image_name}_rho_w_L2.csv",
+            )
+        )
+
