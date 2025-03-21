@@ -113,11 +113,11 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
+        "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
         # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
         # "MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc",
     ]

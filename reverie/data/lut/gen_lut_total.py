@@ -459,10 +459,10 @@ if __name__ == "__main__":
 
     # Define your dimensions here
     dimensions = [
-        np.arange(10, 71, 5).tolist(),  # sun zenith
-        np.arange(0, 31, 5).tolist(),  # view zenith
-        np.arange(0, 361, 10).tolist(),  # relative azimuth
-        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], # H2O g/cm2
+        np.arange(10, 61, 10).tolist(),  # sun zenith
+        np.arange(0, 31, 10).tolist(),  # view zenith
+        np.arange(0, 181, 10).tolist(),  # relative azimuth
+        [1.0, 2.0, 3.0], # H2O g/cm2
         [0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         [
             1.0e-03,
@@ -482,7 +482,7 @@ if __name__ == "__main__":
             3.0e+00,
             5.0e+00
         ], # AOD 555
-        [500., 750., 1013., 1100],  # pressure at target mb
+        [750., 1013., 1100],  # pressure at target mb
         [-3, -4],  # sensor altitude -km
         np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
     ]

@@ -5,13 +5,17 @@ channels:
 dependencies:
   - python
   - numpy
+  - dask
   - netCDF4
   - h5py
-  - osgeo
+  - gdal
   - pyproj
   - pandas
   - geopandas
   - tqdm
+  - timezonefinder
+  - pendulum
+  - charset-normalizer
   - shapely
   - xarray
   - zarr
@@ -19,5 +23,5 @@ dependencies:
   - rasterio
   - pip
   - scipy
-#  - pip:
-#    - p_tqdm
+  - pip:
+    - p_tqdm

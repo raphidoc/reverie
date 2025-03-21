@@ -147,7 +147,7 @@ class ReveCube(ABC):
         # In that case the datetime object will have a utc timezone.
         # We cannot make comutation on timezone aware and not aware.
         # It's best to force the timezone to be utc and to let the user actually deal with the data provided to the app.
-        acq_time_z = datetime.datetime.utcfromtimestamp(time_var.data[0]).replace(
+        acq_time_z = datetime.datetime.utcfromtimestamp(int(time_var.data[0])).replace(
             tzinfo=datetime.timezone.utc
         )
         altitude_var = in_ds.variables["z"]
