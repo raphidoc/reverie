@@ -14,4 +14,4 @@
 0 # IDIREC
 0 # IGROUN
 0.002262 # target reflectance
--1 # Atmospheric correction (IRAPP)y
+-1 # Atmospheric correction (IRAPP)

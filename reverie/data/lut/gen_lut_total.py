@@ -23,14 +23,14 @@ The LUT from acolite is used as a starting point:
 * 'wnd' (wind speed [m s-1], size = 1):
     2.0
 
-* 'tau' (aerosol optical thikness at 550, size = 16):
+* 'tau' (aerosol optical depth at 550, size = 16):
     [1.0e-03, 1.0e-02, 2.0e-02, 5.0e-02, 1.0e-01, 1.5e-01, 2.0e-01, 3.0e-01, 5.0e-01, 7.0e-01,1.0e+00, 1.3e+00, 1.6e+00, 2.0e+00, 3.0e+00, 5.0e+00]
 
 * Pressure at target [mbar] (proxy of target altitude) (size = 4):
     As given in the aerosol filename [500., 750., 1013., 1100]
 
 
-On which 19 parameters are indexed as: lut(par, wave, azi, thv, ths, wnd, tau)
+On which 19 parameters are indexed as: sky_glint(par, wave, azi, thv, ths, wnd, tau)
 
 * 'wl' (wavelength)
 * 'utotr' (upwelling total Rayleigh transmittance)
@@ -462,21 +462,31 @@ if __name__ == "__main__":
     # ]
 
     # Define your dimensions here
-    # Reduced dimension to work with ACI13, ACI12, ACI10 only
     dimensions = [
-        np.arange(30, 51, 10).tolist(),  # sun zenith
-        np.arange(0, 21, 10).tolist(),  # view zenith
-        np.arange(70, 101, 10).tolist(),  # relative azimuth
+        np.arange(10, 71, 5).tolist(),  # sun zenith
+        np.arange(0, 31, 5).tolist(),  # view zenith
+        np.arange(0, 361, 10).tolist(),  # relative azimuth
+        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], # H2O g/cm2
+        [0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         [
-            1.0,
-            1.5,
-        ],  # [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
-        [
-            0.3,
-            0.5,
-        ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
-        [0.05, 0.1], # AOT 555
-        [750.0, 1013.0],  # pressure at target mb
+            1.0e-03,
+            1.0e-02,
+            2.0e-02,
+            5.0e-02,
+            1.0e-01,
+            1.5e-01,
+            2.0e-01,
+            3.0e-01,
+            5.0e-01,
+            7.0e-01,
+            1.0e+00,
+            1.3e+00,
+            1.6e+00,
+            2.0e+00,
+            3.0e+00,
+            5.0e+00
+        ], # AOD 555
+        [500., 750., 1013., 1100],  # pressure at target mb
         [-3, -4],  # sensor altitude -km
         np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
     ]

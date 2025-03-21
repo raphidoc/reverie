@@ -3318,7 +3318,7 @@ c                                                                      c
 c                       print of final results                         c
 c                                                                      c
 c**********************************************************************c
-C begining case for a lut output
+C begining case for a sky_glint output
 C SIMPLE LUT in azimuth
       if (ilut.eq.2) then
           do ifi=1,nfi

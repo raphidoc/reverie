@@ -13,7 +13,7 @@ import math
 from reverie import ReveCube
 from reverie.image.tile import Tile
 from reverie.utils.helper import fwhm_2_rsr
-from reverie.lut import z17
+from reverie.sky_glint import z17
 
 import matplotlib.pyplot as plt
 
@@ -53,8 +53,10 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
     image = image.isel(wavelength=good_bands_slice)
 
     # filter the image for the in situ wavelength range
-    min_wavelength_in_situ = in_situ["wavelength"].min()
-    max_wavelength_in_situ = in_situ["wavelength"].max()
+    # min_wavelength_in_situ = in_situ["wavelength"].min()
+    # max_wavelength_in_situ = in_situ["wavelength"].max()
+    min_wavelength_in_situ = 380
+    max_wavelength_in_situ = 800
 
     # Filter the image wavelengths based on these values
     # Create a boolean mask for the wavelengths within the range
@@ -136,7 +138,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
     window_dict = l1.extract_pixel(
         insitu_path,
         max_time_diff=12,
-        window_size=7,
+        window_size=3,
     )[1]
 
     logging.info(f"Extracted window {window_dict.keys}")
@@ -591,7 +593,7 @@ def run_ac(l1: ReveCube, in_situ, window_size, gain):
         #             rho_sky_nc.wind[()],
         #             rho_sky_nc.tau[()],
         #         ),
-        #         values=rho_sky_nc.variables["lut"][:, :, :, :, :, :],
+        #         values=rho_sky_nc.variables["sky_glint"][:, :, :, :, :, :],
         #         xi=xi,
         #         method="cubic"
         #     )
@@ -692,7 +694,7 @@ if __name__ == "__main__":
         # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
         "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
-        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
         # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
         # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
         # "MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc",
@@ -702,8 +704,8 @@ if __name__ == "__main__":
         l1 = ReveCube.from_reve_nc(os.path.join(image_dir, image))
 
         # insitu data
-        insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/match_bg_20220705.csv"
-        # insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/viccal_rrs.csv"
+        # insitu_path = "/D/Documents/phd/thesis/2_chapter/data/wise/match_bg_20220705.csv"
+        insitu_path = "/D/Documents/phd/training/sls_2024/practicals/presentation/exctraction_points.csv"
         in_situ = pd.read_csv(insitu_path)
 
         gain = pd.read_csv(
@@ -714,7 +716,8 @@ if __name__ == "__main__":
 
         ac_matchup.to_csv(
             os.path.join(
-                "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/",
+                # "/D/Documents/phd/thesis/2_chapter/data/wise/viccal/",
+                "/D/Documents/phd/training/sls_2024/practicals/presentation/"
                 f"{l1.image_name}_rho_w_L2.csv",
             )
         )

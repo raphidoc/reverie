@@ -1,0 +1,23 @@
+name: reverie
+channels:
+  - conda-forge
+  - ocdb
+dependencies:
+  - python
+  - numpy
+  - netCDF4
+  - h5py
+  - osgeo
+  - pyproj
+  - pandas
+  - geopandas
+  - tqdm
+  - shapely
+  - xarray
+  - zarr
+  - affine
+  - rasterio
+  - pip
+  - scipy
+#  - pip:
+#    - p_tqdm

@@ -30,7 +30,7 @@ The LUT from acolite is used as a starting point:
     As given in the aerosol filename [500., 750., 1013., 1100]
 
 
-On which 19 parameters are indexed as: lut(par, wave, azi, thv, ths, wnd, tau)
+On which 19 parameters are indexed as: sky_glint(par, wave, azi, thv, ths, wnd, tau)
 
 * 'wl' (wavelength)
 * 'utotr' (upwelling total Rayleigh transmittance)

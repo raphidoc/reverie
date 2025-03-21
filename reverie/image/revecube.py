@@ -4,6 +4,7 @@ import os
 from abc import ABC
 import datetime
 import re
+import math
 
 # Third party imports
 import netCDF4
@@ -15,7 +16,6 @@ from tqdm import tqdm
 from p_tqdm import p_uimap
 import shapely
 import xarray as xr
-import math
 import zarr
 import affine
 from rasterio.windows import Window

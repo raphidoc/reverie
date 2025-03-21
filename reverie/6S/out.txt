@@ -1,4 +1,4 @@
- {"6s_version.":2.1, 
+ {"6s_version.":2.1,
  "solar_zenith_[degree]":   34.6300011     ,
  "solar_azimuth_[degree]":   229.240005     ,
  "view_zenith_[degree]":   6.73000002     ,
@@ -6,7 +6,7 @@
  "scattering_angle_[degree]":   138.696228     ,
  "relative_azimuth_[degree]"   171.999985     ,
  "idatm":           2 ,
- "atmospheric_model":"midlatitude summer  (uh2o=2.93g/cm2,uo3=.319cm-atm),,
+ "atmospheric_model":"midlatitude summer  (uh2o=2.93g/cm2,uo3=.319cm-atm),
  "iaer":           0 ,
  "visibility_[km]":   3.99999991E-02 ,"aot_550_[nm]":   0.00000000     ,
  "iwave":          -1 ,
@@ -106,5 +106,5 @@
  "primary_degree_of_pol_total": -0.268643081     ,
  "single_scattering_albedo_rayleigh":   1.00000000     ,
  "single_scattering_albedo_aerosol":   0.00000000     ,
- "single_scattering_albedo_total":   1.00000000    
+ "single_scattering_albedo_total":   1.00000000
  }

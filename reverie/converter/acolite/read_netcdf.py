@@ -50,6 +50,14 @@ class AcoliteNetCDF(ReveCube):
         # As ACOLITE only process satellite imagery we give a symbolic altitude of 800km
         z = 800  # As we have only one altitude, could be a scalar
 
+        # Get non spectral var to find projection data
+        # pattern = re.compile(r'\b\w\D\w\b')
+        #
+        # def find_matching_keys(pattern, dictionary):
+        #     return list(filter(lambda key: re.search(pattern, key), dictionary.keys()))
+        #
+        # non_spectral_var = find_matching_keys(pattern, src_ds.variables)
+
         grid_mapping = src_ds.variables["transverse_mercator"]
         crs = pyproj.CRS.from_wkt(grid_mapping.crs_wkt)
         affine = None
