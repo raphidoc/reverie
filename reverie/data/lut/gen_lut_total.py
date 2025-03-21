@@ -174,10 +174,6 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
         "wavelength",
     )
 
-    atmospheric_reflectance_at_sensor,
-    background_reflectance_at_sensor,
-    pixel_reflectance_at_sensor,
-
     nc.createVariable(
         "atmospheric_reflectance_at_sensor",
         "f4",
