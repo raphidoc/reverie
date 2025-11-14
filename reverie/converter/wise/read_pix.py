@@ -21,7 +21,7 @@ import logging
 from reverie.image import ReveCube
 from .flightline import FlightLine
 from reverie.utils import helper
-from reverie.utils.tile import Tile
+from reverie.image.tile import Tile
 from reverie.utils.cf_aliases import get_cf_std_name
 
 # from reverie.utils.tile import Tile
@@ -105,7 +105,7 @@ class Pix(ReveCube):
         map_info = self.header["map info"]
         self.Affine, self.CRS, self.Proj4String = helper.parse_mapinfo(map_info)
         # Compute projected and geographic coordinates
-        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols, self.CRS)
+        self.cal_coordinate(self.Affine, self.n_rows, self.n_cols)
 
         # Define data type, unit, scale factor, offset, and ignore values
         dtype = int(self.header["data type"])
@@ -190,15 +190,13 @@ class Pix(ReveCube):
             z=self.z,
             y=self.y,
             x=self.x,
-            lat=self.lat,
-            lon=self.lon,
             n_rows=self.n_rows,
             n_cols=self.n_cols,
             Affine=self.Affine,
             crs=self.CRS,
         )
 
-        self.cal_coordinate_grid(self.lat, self.lon)
+        self.expand_coordinate(self.x, self.y, self.CRS)
 
         self.cal_time(self.center_lon, self.center_lat)
 
@@ -329,7 +327,7 @@ class Pix(ReveCube):
         :return: valid_mask
         """
         if self.valid_mask is None:
-            # TODO: Problem when the band read is flag in as bbl (bad band list),
+            # TODO: Problem when the band read is flagged in bbl (bad band list),
             #   the mask contains only False. Should filter out the bbl bands.
             iband = 10
             radiance_at_sensor = self.read_band(iband)

@@ -11,29 +11,6 @@ The LUT from acolite is used as a starting point:
     1.4, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8, 1.85, 1.9, 2., 2.05, 2.1,
     2.15, 2.2, 2.25, 2.3, 2.35, 2.4, 2.45, 2.5]
 
-            [
-            0.350,
-            0.400,
-            0.412,
-            0.443,
-            0.470,
-            0.488,
-            0.515,
-            0.550,
-            0.590,
-            0.633,
-            0.670,
-            0.694,
-            0.760,
-            0.860,
-            1.240,
-            1.536,
-            1.650,
-            1.950,
-            2.250,
-            3.750,
-        ],
-
 * 'azi' (relative azimuth [degree], size = 13):
     [0., 10., 20., 40., 60., 80., 90., 100., 120., 140., 160., 170., 180.]
 
@@ -46,14 +23,14 @@ The LUT from acolite is used as a starting point:
 * 'wnd' (wind speed [m s-1], size = 1):
     2.0
 
-* 'tau' (aerosol optical thikness at 550, size = 16):
+* 'tau' (aerosol optical depth at 550, size = 16):
     [1.0e-03, 1.0e-02, 2.0e-02, 5.0e-02, 1.0e-01, 1.5e-01, 2.0e-01, 3.0e-01, 5.0e-01, 7.0e-01,1.0e+00, 1.3e+00, 1.6e+00, 2.0e+00, 3.0e+00, 5.0e+00]
 
 * Pressure at target [mbar] (proxy of target altitude) (size = 4):
     As given in the aerosol filename [500., 750., 1013., 1100]
 
 
-On which 19 parameters are indexed as: sky_glint(par, wave, azi, thv, ths, wnd, tau)
+On which 19 parameters are indexed as: surface(par, wave, azi, thv, ths, wnd, tau)
 
 * 'wl' (wavelength)
 * 'utotr' (upwelling total Rayleigh transmittance)
@@ -87,9 +64,12 @@ import os
 import subprocess
 import time
 
+import math
+
 import netCDF4
 import numpy as np
-from p_tqdm import p_uimap
+
+# from p_tqdm import p_uimap
 import json
 
 
@@ -124,6 +104,7 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     nc.createDimension("sol_zen", len(coords["sol_zen"]))
     nc.createDimension("view_zen", len(coords["view_zen"]))
     nc.createDimension("relative_azimuth", len(coords["relative_azimuth"]))
+    nc.createDimension("aot550", len(coords["aot550"]))
     nc.createDimension("target_pressure", len(coords["target_pressure"]))
     nc.createDimension("sensor_altitude", len(coords["sensor_altitude"]))
     nc.createDimension("wavelength", len(coords["wavelength"]))
@@ -148,15 +129,10 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
     relative_azimuth_nc.units = "degree"
     relative_azimuth_nc[:] = coords["relative_azimuth"]
 
-    water_nc = nc.createVariable("water", "f4", ("water",))
-    water_nc.standard_name = "atmosphere_mass_content_of_water_vapor"
-    water_nc.units = "g cm-2"
-    water_nc[:] = coords["water"]
-
-    ozone_nc = nc.createVariable("ozone", "f4", ("ozone",))
-    ozone_nc.standard_name = "equivalent_thickness_at_stp_of_atmosphere_ozone_content"
-    ozone_nc.units = "atm-cm"
-    ozone_nc[:] = coords["ozone"]
+    ozone_nc = nc.createVariable("aot550", "f4", ("aot550",))
+    ozone_nc.standard_name = "aerosol_optical_thickness_at_550_nm"
+    ozone_nc.units = "1"
+    ozone_nc[:] = coords["aot550"]
 
     pressure_nc = nc.createVariable("target_pressure", "f4", ("target_pressure",))
     pressure_nc.units = "mbar"
@@ -178,36 +154,73 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
         "sol_zen",
         "view_zen",
         "relative_azimuth",
-        "water",
-        "ozone",
+        "aot550",
         "target_pressure",
         "sensor_altitude",
         "wavelength",
     )
 
     nc.createVariable(
-        "tgv", "f4", dimensions, compression=compression, complevel=complevel
+        "atmospheric_reflectance_at_sensor",
+        "f4",
+        dimensions,
+        compression=compression,
+        complevel=complevel,
     )
     nc.createVariable(
-        "tgs", "f4", dimensions, compression=compression, complevel=complevel
+        "total_scattering_trans_total",
+        "f4",
+        dimensions,
+        compression=compression,
+        complevel=complevel,
+    )
+    nc.createVariable(
+        "spherical_albedo_total",
+        "f4",
+        dimensions,
+        compression=compression,
+        complevel=complevel,
     )
 
     return nc
 
-
 # Function to run model and accumulate results
-def run_model_and_accumulate(start, end, commands, tgv, tgs):
+def run_model_and_accumulate(
+    start,
+    end,
+    commands,
+    atmospheric_reflectance_at_sensor,
+    total_scattering_trans_total,
+    spherical_albedo_total,
+):
     global counter  # Declare counter as global
 
+    # print(f"Running task with start={start}, end={end}")
+
     for i in range(start, end):
+        counter += 1
+
         command = commands[i]
         process = subprocess.run(command, shell=True, capture_output=True)
 
+        # print(f"Subprocess exited with status {process.returncode}")
+
+        if process.stderr:
+            error_msg = process.stderr.decode("utf-8")
+            raise RuntimeError(f"Subprocess error: {error_msg}")
+
         temp = json.loads(process.stdout)
 
-        tgv[i] = float(temp["global_gas_trans_upward"])
-        tgs[i] = float(temp["global_gas_trans_downward"])
-        counter += 1
+        # if math.isnan(float(temp["atmospheric_reflectance_at_sensor"])):
+        #     print("atmospheric_path_radiance is NaN ...")
+
+        atmospheric_reflectance_at_sensor[i] = float(
+            temp["atmospheric_reflectance_at_sensor"]
+        )
+        total_scattering_trans_total[i] = float(temp["total_scattering_trans_total"])
+        spherical_albedo_total[i] = float(temp["spherical_albedo_total"])
+
+        # counter += 1
 
     return
 
@@ -215,48 +228,108 @@ def run_model_and_accumulate(start, end, commands, tgv, tgs):
 # Declare the global counter
 counter = 0
 
-
 if __name__ == "__main__":
-    # Function to generate cartesian product of input iterables
+    # Function to generate cartesian product of input
     def cartesian_product(dimensions):
         return list(itertools.product(*dimensions))
 
-    # TODO, run only for the 20 node wavelength of 6S
-    #  they use liner interpolation for the rest of the spectrun anyway
+    # TODO, run only for the 20 node wavelength of 6S ?
+    # 20 node wavelength of 6s
+    # wavelength = [
+    #     0.350,
+    #     0.400,
+    #     0.412,
+    #     0.443,
+    #     0.470,
+    #     0.488,
+    #     0.515,
+    #     0.550,
+    #     0.590,
+    #     0.633,
+    #     0.670,
+    #     0.694,
+    #     0.760,
+    #     0.860,
+    #     # 1.240,
+    #     # 1.536,
+    #     # 1.650,
+    #     # 1.950,
+    #     # 2.250,
+    #     # 3.750,
+    # ]
+
     # Define your dimensions here
+    # dimensions = [
+    #     np.arange(10, 61, 10).tolist(),  # sun zenith
+    #     np.arange(0, 31, 10).tolist(),  # view zenith
+    #     np.arange(0, 181, 10).tolist(),  # relative azimuth
+    #     [1.0, 2.0, 3.0], # H2O g/cm2
+    #     [0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+    #     [
+    #         1.0e-3,
+    #         1.0e-2,
+    #         2.0e-2,
+    #         5.0e-2,
+    #         1.0e-1,
+    #         1.5e-1,
+    #         2.0e-1,
+    #         3.0e-1,
+    #         5.0e-1,
+    #         7.0e-1,
+    #         1.0,
+    #         1.3,
+    #         1.6,
+    #         2.0,
+    #         3.0,
+    #         5.0
+    #     ], # AOD 555
+    #     [750., 1013.],  # pressure at target mb
+    #     [-1, -3, -4],  # sensor altitude -km
+    #     np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
+    # ]
+
     dimensions = [
-        np.arange(0, 90, 50).tolist(),  # sun zenith
-        np.arange(0, 70, 50).tolist(),  # view zenith
-        np.arange(0, 180, 30).tolist(),  # relative azimuth
+        [30,40,50],
+        # np.arange(10, 61, 10).tolist(),  # sun zenith
+        np.arange(0, 31, 10).tolist(),  # view zenith
+        # np.arange(0, 181, 10).tolist(),  # relative azimuth
+        [70,80,90,100,110],
         [
-            0.001,
-            0.01,
-            0.02,
-            0.05,
-            0.1,
-            0.15,
-            0.2,
-            0.3,
-            0.5,
-            0.7,
-            1,
-            1.3,
-            1.6,
-            2,
-            3,
-            5,
-        ],  # aot550
-        [500, 750.0, 1013.0, 1100.0],  # pressure at target mb
-        [-0.5, -1, -3, -4],  # sensor altitude -km
-        np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
+            0,
+            5.0e-2,
+            1.0e-1,
+            1.5e-1,
+            2.0e-1
+        ], # AOD 555
+        [750., 1013.],  # pressure at target mb
+        [-3, -4],  # sensor altitude -km
+        np.arange(0.34, 0.81, 0.01).tolist(),  # wavelength
     ]
+
+    # Test dimension
+    # dimensions = [
+    #     np.arange(30, 31, 10).tolist(),  # sun zenith
+    #     np.arange(0, 10, 10).tolist(),  # view zenith
+    #     np.arange(80, 81, 10).tolist(),  # relative azimuth
+    #     [
+    #         1.0,
+    #     ],  # [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
+    #     [
+    #         0.3,
+    #     ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+    #     [0.05],
+    #     [750.0],  # pressure at target mb
+    #     [-3],  # sensor altitude -km
+    #     np.arange(0.34, 0.36, 0.01).tolist(),  # wavelength
+    # ]
 
     combination = cartesian_product(dimensions)
 
     print("number of combination: ", len(combination))
 
-    tgv = [0] * len(combination)
-    tgs = [0] * len(combination)
+    atmospheric_reflectance_at_sensor = [0] * len(combination)
+    total_scattering_trans_total = [0] * len(combination)
+    spherical_albedo_total = [0] * len(combination)
 
     # Create commands
     commands = []
@@ -264,22 +337,21 @@ if __name__ == "__main__":
         command = (
             'echo "\n0 # IGEOM\n'
             + f"{combination[i][0]} 0.0 {combination[i][1]} {combination[i][2]} 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
-            + "8 # IDATM no gas\n"
-            + f"{combination[i][3]}\n"
-            + f"{combination[i][4]}\n"
-            + "0 # IAER maritime\n"
-            + "-1 # visibility\n"
-            + f"{combination[i][5]} # XPS pressure at terget\n"
-            + f"{combination[i][6]} # XPP sensor altitude\n"
+            + "0 # IDATM\n"
+            + "2 # IAER maritime\n"
+            + f"0 # visibility\n"
+            + f"{combination[i][3]} # aot(555)\n"
+            + f"{combination[i][4]} # XPS pressure at target\n"
+            + f"{combination[i][5]} # XPP sensor altitude\n"
             + "-1.0 -1.0 # UH20 UO3 below sensor\n"
             + "-1.0 # taer550 below sensor\n"
             + "-1 # IWAVE monochromatic\n"
-            + f"{combination[i][7]} # wavelength\n"
+            + f"{combination[i][6]} # wavelength\n"
             + "0 # INHOMO\n"
             + "0 # IDIREC\n"
             + "0 # IGROUN 0 = rho\n"
             + "0 # surface reflectance\n"
-            + '-1 # IRAPP no atmospheric correction\n" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1'
+            + '-1 # IRAPP no atmospheric correction\n" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1-json'
         )
         commands.append(command)
 
@@ -291,12 +363,14 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
 
     # Determine the number of workers to use
-    num_workers = os.cpu_count()
+    num_workers = os.cpu_count() -2
 
     print(f"Running on {num_workers} threads")
 
     # Calculate the number of iterations per worker
     iterations_per_worker = len(combination) // num_workers
+
+    print(f"{iterations_per_worker} iteration per worker")
 
     start_time = time.perf_counter()
 
@@ -316,9 +390,27 @@ if __name__ == "__main__":
             # Start the worker
             futures.append(
                 executor.submit(
-                    run_model_and_accumulate, start, end, commands, tgv, tgs
+                    run_model_and_accumulate,
+                    start,
+                    end,
+                    commands,
+                    atmospheric_reflectance_at_sensor,
+                    total_scattering_trans_total,
+                    spherical_albedo_total,
                 )
             )
+
+        # Iterate over the Future objects as they complete
+        # Allow to avoid the global counter object
+        # for future in concurrent.futures.as_completed(futures):
+        #     # The result of the Future is the return value of the function
+        #     result = future.result()
+        #
+        #     # Increment the counter
+        #     counter += 1
+        #
+        #     # Print the progress
+        #     print(f"Completed {counter} out of {len(combination)} tasks")
 
         while counter < len(combination):
             time.sleep(1)  # Sleep for a second
@@ -352,42 +444,30 @@ if __name__ == "__main__":
             "sol_zen": dimensions[0],
             "view_zen": dimensions[1],
             "relative_azimuth": dimensions[2],
-            "water": dimensions[3],
-            "ozone": dimensions[4],
-            "target_pressure": dimensions[5],
-            "sensor_altitude": dimensions[6],
-            "wavelength": dimensions[7],
+            "aot550": dimensions[3],
+            "target_pressure": dimensions[4],
+            "sensor_altitude": dimensions[5],
+            "wavelength": dimensions[6],
         }
 
-    nc = create_gas_output_nc(os.path.join(output_dir, "ACI12_gas.nc"), coords)
+    nc = create_gas_output_nc(os.path.join(output_dir, "lut_aerosol.nc"), coords)
 
     # Get the shape of the dimensions
     shape = [len(dimension) for dimension in dimensions]
 
-    tgs_reshaped = np.reshape(tgs, shape)
-    tgv_reshaped = np.reshape(tgv, shape)
+    atmospheric_reflectance_at_sensor = np.reshape(atmospheric_reflectance_at_sensor, shape)
+    total_scattering_trans_total = np.reshape(total_scattering_trans_total, shape)
+    spherical_albedo_total = np.reshape(spherical_albedo_total, shape)
 
     # Write the results to the file
-    nc.variables["tgs"][
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-    ] = tgs_reshaped
-
-    nc.variables["tgv"][
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-    ] = tgv_reshaped
+    nc.variables["atmospheric_reflectance_at_sensor"][
+        :, :, :, :, :, :, :
+    ] = atmospheric_reflectance_at_sensor
+    nc.variables["total_scattering_trans_total"][
+    :, :, :, :, :, :, :
+    ] = total_scattering_trans_total
+    nc.variables["spherical_albedo_total"][
+        :, :, :, :, :, :, :
+    ] = spherical_albedo_total
 
     nc.close()

@@ -29,12 +29,17 @@ WAVA6.o AEROPROF.o ALI.o ASTER.o ETM.o HYPBLUE.o VGT.o VIIRS.o
 
 OBJECTS1= main.o 
 
-OBJECTS2= mainlutaero.o 
+OBJECTS2= mainjson.o
 
+mainjson.o: mainjson.f
+	$(FC) -c mainjson.f $(FFLAGS)
 
-sixs: $(OBJECTS0) $(OBJECTS1) $(OBJECTS2)
+sixs: $(OBJECTS0) $(OBJECTS1) #$(OBJECTS2)
 	$(FC)  $(OBJECTS1) $(OBJECTS0) -o sixsV2.1  -lm
-	$(FC)  $(OBJECTS2) $(OBJECTS0) -o sixsV2.1-lutaero  -lm
+	$(FC)  $(OBJECTS2) $(OBJECTS0) -o sixsV2.1-json  -lm
+
+#sixs: $(OBJECTS0) $(OBJECTS1) $(OBJECTS2)
+#	$(FC)  $(OBJECTS1) $(OBJECTS0) -o jsixs  -lm
  	
 
 clean:

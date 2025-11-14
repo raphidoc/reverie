@@ -161,3 +161,7 @@ cython_debug/
 
 # Package specific
 reverie/data/lut/output
+reverie/6S
+
+# Fortran
+*.o

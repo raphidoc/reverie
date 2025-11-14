@@ -50,7 +50,7 @@ def date_time_to_julian_day(date_time: datetime):
 
 
 def sun_geom_meeus(date_time, obs_latitude):
-    """Compute the solar azimuth and altitude using the Meeus (1998) algorithm NOT WORKING
+    """Compute the solar azimuth and altitude using the Meeus (1998) algorithm !!! NOT WORKING !!!
     Parameters
     ----------
     date_time: datetime

@@ -8,7 +8,7 @@ from bokeh.layouts import row, column
 import scipy as sp
 
 gas_trans_nc = xr.open_dataset(
-    "/reverie/data/sky_glint/output/ACI12_gas.nc"
+    "/reverie/data/surface/output/ACI12_gas.nc"
 )
 
 # Generate some sample data

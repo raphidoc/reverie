@@ -3,6 +3,8 @@ downloads and interpolates ancillary data from the ocean data server
 """
 import os
 
+from patsy.state import center
+
 from reverie.ancillary.obpg.interp_gmao import interp_gmao
 from reverie.ancillary.obpg import OBPGSession
 
@@ -21,10 +23,12 @@ def get_gmao(l1):
         os.makedirs(os.path.join(PATH_TO_DATA, "anc"))
 
     dt = l1.acq_time_z
-    central_lon = l1.lon[round(len(l1.lon) / 2)]
-    central_lat = l1.lat[round(len(l1.lat) / 2)]
+
+    l1.expand_coordinate()
+    center_lon = l1.center_lon
+    center_lat = l1.center_lat
     print(
-        f"Getting ancillary data for {dt.strftime('%Y-%m-%dT%H:%M:%SZ')} {central_lon:.3f}E {central_lat:.3f}N"
+        f"Getting ancillary data for {dt.strftime('%Y-%m-%dT%H:%M:%SZ')} {center_lon:.3f}E {center_lat:.3f}N"
     )
 
     # Select .MET files hour before and after observation time
@@ -180,9 +184,6 @@ def get_gmao(l1):
     print(
         f"Using GMAO \n MET {met_local_files} \n AER {aer_local_files}"
     )
-
-    center_lon = l1.lon[int(len(l1.lon) / 2)]
-    center_lat = l1.lat[int(len(l1.lat) / 2)]
 
     met_anc = interp_gmao(met_local_files, center_lon, center_lat, dt)
     aer_anc = interp_gmao(aer_local_files, center_lon, center_lat, dt)

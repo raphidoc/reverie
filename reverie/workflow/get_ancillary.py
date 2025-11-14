@@ -1,15 +1,28 @@
 import math
 import os
 import numpy as np
+import logging
 
 import netCDF4 as nc
 from itertools import compress
+
 
 from reverie import ReveCube
 from reverie.ancillary import obpg
 
 
 def add_ancillary(l1: ReveCube):
+
+    # test if ancillary data is already present
+    required_anc = ["wind_speed", "wind_direction", "surface_air_pressure",
+                     "atmosphere_mass_content_of_water_vapor",
+                     "equivalent_thickness_at_stp_of_atmosphere_ozone_content",
+                     "aerosol_optical_thickness_at_555_nm"]
+    existing_anc = set(l1.in_ds.variables.keys())
+    if all(var in existing_anc for var in required_anc):
+        logging.info("Ancillary data already present.")
+        return
+
     anc = obpg.get_gmao(l1)
 
     # Test for empty values returned in anc object
@@ -117,7 +130,8 @@ if __name__ == "__main__":
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-L1CG.nc"
+        # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
         # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
         # "MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc",
     ]

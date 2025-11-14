@@ -30,7 +30,7 @@ The LUT from acolite is used as a starting point:
     As given in the aerosol filename [500., 750., 1013., 1100]
 
 
-On which 19 parameters are indexed as: sky_glint(par, wave, azi, thv, ths, wnd, tau)
+On which 19 parameters are indexed as: surface(par, wave, azi, thv, ths, wnd, tau)
 
 * 'wl' (wavelength)
 * 'utotr' (upwelling total Rayleigh transmittance)
@@ -182,139 +182,14 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
         complevel=complevel,
     )
     nc.createVariable(
-        "background_reflectance_at_sensor",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "pixel_reflectance_at_sensor",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-
-    nc.createVariable(
-        "direct_solar_irradiance_at_target",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "diffuse_atmospheric_irradiance_at_target",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "environement_irradiance_at_target",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-
-    nc.createVariable(
-        "atmospheric_radiance_at_sensor",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "background_radiance_at_sensor",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "pixel_radiance_at_sensor",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-
-    nc.createVariable(
-        "global_gas_trans_downward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "global_gas_trans_upward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
         "global_gas_trans_total",
         "f4",
         dimensions,
         compression=compression,
         complevel=complevel,
     )
-
     nc.createVariable(
-        "rayleigh_trans_downward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "rayleigh_trans_upward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "rayleigh_trans_total",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-
-    nc.createVariable(
-        "aerosol_trans_downward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "aerosol_trans_upward",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "aerosol_trans_total",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-
-    nc.createVariable(
-        "spherical_albedo_rayleigh",
-        "f4",
-        dimensions,
-        compression=compression,
-        complevel=complevel,
-    )
-    nc.createVariable(
-        "spherical_albedo_aerosol",
+        "total_scattering_trans_total",
         "f4",
         dimensions,
         compression=compression,
@@ -330,32 +205,14 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
 
     return nc
 
-
 # Function to run model and accumulate results
 def run_model_and_accumulate(
     start,
     end,
     commands,
     atmospheric_reflectance_at_sensor,
-    background_reflectance_at_sensor,
-    pixel_reflectance_at_sensor,
-    direct_solar_irradiance_at_target,
-    diffuse_atmospheric_irradiance_at_target,
-    environement_irradiance_at_target,
-    atmospheric_radiance_at_sensor,
-    background_radiance_at_sensor,
-    pixel_radiance_at_sensor,
-    gas_trans_downward,
-    gas_trans_upward,
     gas_trans_total,
-    rayleigh_trans_downward,
-    rayleigh_trans_upward,
-    rayleigh_trans_total,
-    aerosol_trans_downward,
-    aerosol_trans_upward,
-    aerosol_trans_total,
-    spherical_albedo_rayleigh,
-    spherical_albedo_aerosol,
+    total_scattering_trans_total,
     spherical_albedo_total,
 ):
     global counter  # Declare counter as global
@@ -370,6 +227,10 @@ def run_model_and_accumulate(
 
         # print(f"Subprocess exited with status {process.returncode}")
 
+        if process.stderr:
+            error_msg = process.stderr.decode("utf-8")
+            raise RuntimeError(f"Subprocess error: {error_msg}")
+
         temp = json.loads(process.stdout)
 
         # if math.isnan(float(temp["atmospheric_reflectance_at_sensor"])):
@@ -378,45 +239,10 @@ def run_model_and_accumulate(
         atmospheric_reflectance_at_sensor[i] = float(
             temp["atmospheric_reflectance_at_sensor"]
         )
-        background_reflectance_at_sensor[i] = float(
-            temp["background_reflectance_at_sensor"]
-        )
-        pixel_reflectance_at_sensor[i] = float(temp["pixel_reflectance_at_sensor"])
 
-        direct_solar_irradiance_at_target[i] = float(
-            temp["direct_solar_irradiance_at_target_[W m-2 um-1]"]
-        )
-        diffuse_atmospheric_irradiance_at_target[i] = float(
-            temp["diffuse_atmospheric_irradiance_at_target_[W m-2 um-1]"]
-        )
-        environement_irradiance_at_target[i] = float(
-            temp["environement_irradiance_at_target_[W m-2 um-1]"]
-        )
+        gas_trans_total[i] = float(temp["global_gas_trans_total"])
+        total_scattering_trans_total[i] = float(temp["total_scattering_trans_total"])
 
-        atmospheric_radiance_at_sensor[i] = float(
-            temp["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"]
-        )
-        background_radiance_at_sensor[i] = float(
-            temp["background_radiance_at_sensor_[W m-2 sr-1 um-1]"]
-        )
-        pixel_radiance_at_sensor[i] = float(
-            temp["pixel_radiance_at_sensor_[W m-2 sr-1 um-1]"]
-        )
-
-        gas_trans_downward[i] = float(temp["rayleigh_scattering_trans_downward"])
-        gas_trans_upward[i] = float(temp["rayleigh_scattering_trans_upward"])
-        gas_trans_total[i] = float(temp["rayleigh_scattering_trans_total"])
-
-        rayleigh_trans_downward[i] = float(temp["rayleigh_scattering_trans_downward"])
-        rayleigh_trans_upward[i] = float(temp["rayleigh_scattering_trans_upward"])
-        rayleigh_trans_total[i] = float(temp["rayleigh_scattering_trans_total"])
-
-        aerosol_trans_downward[i] = float(temp["aerosol_scattering_trans_downward"])
-        aerosol_trans_upward[i] = float(temp["aerosol_scattering_trans_upward"])
-        aerosol_trans_total[i] = float(temp["aerosol_scattering_trans_total"])
-
-        spherical_albedo_rayleigh[i] = float(temp["spherical_albedo_rayleigh"])
-        spherical_albedo_aerosol[i] = float(temp["spherical_albedo_aerosol"])
         spherical_albedo_total[i] = float(temp["spherical_albedo_total"])
 
         # counter += 1
@@ -458,80 +284,80 @@ if __name__ == "__main__":
     # ]
 
     # Define your dimensions here
+    # dimensions = [
+    #     np.arange(10, 61, 10).tolist(),  # sun zenith
+    #     np.arange(0, 31, 10).tolist(),  # view zenith
+    #     np.arange(0, 181, 10).tolist(),  # relative azimuth
+    #     [1.0, 2.0, 3.0], # H2O g/cm2
+    #     [0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+    #     [
+    #         1.0e-3,
+    #         1.0e-2,
+    #         2.0e-2,
+    #         5.0e-2,
+    #         1.0e-1,
+    #         1.5e-1,
+    #         2.0e-1,
+    #         3.0e-1,
+    #         5.0e-1,
+    #         7.0e-1,
+    #         1.0,
+    #         1.3,
+    #         1.6,
+    #         2.0,
+    #         3.0,
+    #         5.0
+    #     ], # AOD 555
+    #     [750., 1013.],  # pressure at target mb
+    #     [-1, -3, -4],  # sensor altitude -km
+    #     np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
+    # ]
+
     dimensions = [
-        np.arange(10, 61, 10).tolist(),  # sun zenith
+        [30,40,50],
+        # np.arange(10, 61, 10).tolist(),  # sun zenith
         np.arange(0, 31, 10).tolist(),  # view zenith
-        np.arange(0, 181, 10).tolist(),  # relative azimuth
-        [1.0, 2.0, 3.0], # H2O g/cm2
-        [0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
+        # np.arange(0, 181, 10).tolist(),  # relative azimuth
+        [70,80,90,100,110],
+        [0, 1.0, 2.0], # H2O g/cm2
+        [0, 0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         [
-            1.0e-03,
-            1.0e-02,
-            2.0e-02,
-            5.0e-02,
-            1.0e-01,
-            1.5e-01,
-            2.0e-01,
-            3.0e-01,
-            5.0e-01,
-            7.0e-01,
-            1.0e+00,
-            1.3e+00,
-            1.6e+00,
-            2.0e+00,
-            3.0e+00,
-            5.0e+00
+            0,
+            5.0e-2,
+            1.0e-1,
+            1.5e-1,
+            2.0e-1
         ], # AOD 555
-        [750., 1013., 1100],  # pressure at target mb
+        [750., 1013.],  # pressure at target mb
         [-3, -4],  # sensor altitude -km
-        np.arange(0.34, 1.1, 0.01).tolist(),  # wavelength
+        np.arange(0.34, 0.81, 0.01).tolist(),  # wavelength
     ]
 
-    # Test dimension
     # dimensions = [
-    #     np.arange(30, 31, 10).tolist(),  # sun zenith
-    #     np.arange(0, 10, 10).tolist(),  # view zenith
-    #     np.arange(80, 81, 10).tolist(),  # relative azimuth
+    #     [30],
+    #     # np.arange(10, 61, 10).tolist(),  # sun zenith
+    #     [10],  # view zenith
+    #     # np.arange(0, 181, 10).tolist(),  # relative azimuth
+    #     [70],
+    #     [0], # H2O g/cm2
+    #     [0],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
     #     [
-    #         1.0,
-    #     ],  # [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
-    #     [
-    #         0.3,
-    #     ],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
-    #     [0.05],
-    #     [750.0],  # pressure at target mb
+    #         0
+    #     ], # AOD 555
+    #     [750.],  # pressure at target mb
     #     [-3],  # sensor altitude -km
-    #     np.arange(0.34, 0.36, 0.01).tolist(),  # wavelength
+    #     [0.34],  # wavelength
     # ]
+
+
 
     combination = cartesian_product(dimensions)
 
     print("number of combination: ", len(combination))
 
     atmospheric_reflectance_at_sensor = [0] * len(combination)
-    background_reflectance_at_sensor = [0] * len(combination)
-    pixel_reflectance_at_sensor = [0] * len(combination)
-    direct_solar_irradiance_at_target = [0] * len(combination)
-    diffuse_atmospheric_irradiance_at_target = [0] * len(combination)
-    environement_irradiance_at_target = [0] * len(combination)
-    atmospheric_radiance_at_sensor = [0] * len(combination)
-    background_radiance_at_sensor = [0] * len(combination)
-    pixel_radiance_at_sensor = [0] * len(combination)
-
-    gas_trans_downward = [0] * len(combination)
-    gas_trans_upward = [0] * len(combination)
     gas_trans_total = [0] * len(combination)
-
-    rayleigh_trans_downward = [0] * len(combination)
-    rayleigh_trans_upward = [0] * len(combination)
-    rayleigh_trans_total = [0] * len(combination)
-
-    aerosol_trans_downward = [0] * len(combination)
-    aerosol_trans_upward = [0] * len(combination)
-    aerosol_trans_total = [0] * len(combination)
-
-    spherical_albedo_rayleigh = [0] * len(combination)
-    spherical_albedo_aerosol = [0] * len(combination)
+    total_scattering_trans_total = [0] * len(combination)
     spherical_albedo_total = [0] * len(combination)
 
     # Create commands
@@ -540,13 +366,13 @@ if __name__ == "__main__":
         command = (
             'echo "\n0 # IGEOM\n'
             + f"{combination[i][0]} 0.0 {combination[i][1]} {combination[i][2]} 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
-            + "8 # IDATM no gas\n"
+            + "8 # IDATM\n"
             + f"{combination[i][3]}\n"
             + f"{combination[i][4]}\n"
             + "2 # IAER maritime\n"
             + f"0 # visibility\n"
             + f"{combination[i][5]} # aot(555)\n"
-            + f"{combination[i][6]} # XPS pressure at terget\n"
+            + f"{combination[i][6]} # XPS pressure at target\n"
             + f"{combination[i][7]} # XPP sensor altitude\n"
             + "-1.0 -1.0 # UH20 UO3 below sensor\n"
             + "-1.0 # taer550 below sensor\n"
@@ -556,7 +382,7 @@ if __name__ == "__main__":
             + "0 # IDIREC\n"
             + "0 # IGROUN 0 = rho\n"
             + "0 # surface reflectance\n"
-            + '-1 # IRAPP no atmospheric correction\n" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1'
+            + '-1 # IRAPP no atmospheric correction\n" | /home/raphael/PycharmProjects/reverie/reverie/6S/6sV2.1/sixsV2.1-json'
         )
         commands.append(command)
 
@@ -568,7 +394,7 @@ if __name__ == "__main__":
         os.mkdir(output_dir)
 
     # Determine the number of workers to use
-    num_workers = os.cpu_count()
+    num_workers = os.cpu_count() -2
 
     print(f"Running on {num_workers} threads")
 
@@ -600,25 +426,8 @@ if __name__ == "__main__":
                     end,
                     commands,
                     atmospheric_reflectance_at_sensor,
-                    background_reflectance_at_sensor,
-                    pixel_reflectance_at_sensor,
-                    direct_solar_irradiance_at_target,
-                    diffuse_atmospheric_irradiance_at_target,
-                    environement_irradiance_at_target,
-                    atmospheric_radiance_at_sensor,
-                    background_radiance_at_sensor,
-                    pixel_radiance_at_sensor,
-                    gas_trans_downward,
-                    gas_trans_upward,
                     gas_trans_total,
-                    rayleigh_trans_downward,
-                    rayleigh_trans_upward,
-                    rayleigh_trans_total,
-                    aerosol_trans_downward,
-                    aerosol_trans_upward,
-                    aerosol_trans_total,
-                    spherical_albedo_rayleigh,
-                    spherical_albedo_aerosol,
+                    total_scattering_trans_total,
                     spherical_albedo_total,
                 )
             )
@@ -675,113 +484,28 @@ if __name__ == "__main__":
             "wavelength": dimensions[8],
         }
 
-    nc = create_gas_output_nc(os.path.join(output_dir, "test_total.nc"), coords)
+    nc = create_gas_output_nc(os.path.join(output_dir, "lut_total.nc"), coords)
 
     # Get the shape of the dimensions
     shape = [len(dimension) for dimension in dimensions]
 
-
     atmospheric_reflectance_at_sensor = np.reshape(atmospheric_reflectance_at_sensor, shape)
-    background_reflectance_at_sensor = np.reshape(background_reflectance_at_sensor, shape)
-    pixel_reflectance_at_sensor = np.reshape(pixel_reflectance_at_sensor, shape)
-
-    direct_solar_irradiance_at_target = np.reshape(direct_solar_irradiance_at_target, shape)
-    diffuse_atmospheric_irradiance_at_target = np.reshape(diffuse_atmospheric_irradiance_at_target, shape)
-    environement_irradiance_at_target = np.reshape(environement_irradiance_at_target, shape)
-
-    atmospheric_radiance_at_sensor = np.reshape(atmospheric_radiance_at_sensor, shape)
-    background_radiance_at_sensor = np.reshape(background_radiance_at_sensor, shape)
-    pixel_radiance_at_sensor = np.reshape(pixel_radiance_at_sensor, shape)
-
-    gas_trans_downward = np.reshape(gas_trans_downward, shape)
-    gas_trans_upward = np.reshape(gas_trans_upward, shape)
     gas_trans_total = np.reshape(gas_trans_total, shape)
-
-    rayleigh_trans_downward = np.reshape(rayleigh_trans_downward, shape)
-    rayleigh_trans_upward = np.reshape(rayleigh_trans_upward, shape)
-    rayleigh_trans_total = np.reshape(rayleigh_trans_total, shape)
-
-    aerosol_trans_downward = np.reshape(aerosol_trans_downward, shape)
-    aerosol_trans_upward = np.reshape(aerosol_trans_upward, shape)
-    aerosol_trans_total = np.reshape(aerosol_trans_total, shape)
-
-    spherical_albedo_rayleigh = np.reshape(spherical_albedo_rayleigh, shape)
-    spherical_albedo_aerosol = np.reshape(spherical_albedo_aerosol, shape)
+    total_scattering_trans_total = np.reshape(total_scattering_trans_total, shape)
     spherical_albedo_total = np.reshape(spherical_albedo_total, shape)
 
     # Write the results to the file
     nc.variables["atmospheric_reflectance_at_sensor"][
         :, :, :, :, :, :, :, :, :
     ] = atmospheric_reflectance_at_sensor
-    nc.variables["background_reflectance_at_sensor"][
-        :, :, :, :, :, :, :, :, :
-    ] = background_reflectance_at_sensor
-    nc.variables["pixel_reflectance_at_sensor"][
-        :, :, :, :, :, :, :, :, :
-    ] = pixel_reflectance_at_sensor
-
-    nc.variables["direct_solar_irradiance_at_target"][
-        :, :, :, :, :, :, :, :, :
-    ] = direct_solar_irradiance_at_target
-    nc.variables["diffuse_atmospheric_irradiance_at_target"][
-        :, :, :, :, :, :, :, :, :
-    ] = diffuse_atmospheric_irradiance_at_target
-    nc.variables["environement_irradiance_at_target"][
-        :, :, :, :, :, :, :, :, :
-    ] = environement_irradiance_at_target
-
-    nc.variables["atmospheric_radiance_at_sensor"][
-        :, :, :, :, :, :, :, :, :
-    ] = atmospheric_radiance_at_sensor
-    nc.variables["background_radiance_at_sensor"][
-        :, :, :, :, :, :, :, :, :
-    ] = background_radiance_at_sensor
-    nc.variables["pixel_radiance_at_sensor"][
-        :, :, :, :, :, :, :, :, :
-    ] = pixel_radiance_at_sensor
-
-    nc.variables["global_gas_trans_downward"][
-        :, :, :, :, :, :, :, :, :
-    ] = gas_trans_downward
-    nc.variables["global_gas_trans_upward"][
-        :, :, :, :, :, :, :, :, :
-    ] = gas_trans_upward
-    nc.variables["global_gas_trans_total"][:, :, :, :, :, :, :, :, :] = gas_trans_total
-
-    nc.variables["rayleigh_trans_downward"][
-        :, :, :, :, :, :, :, :, :
-    ] = rayleigh_trans_downward
-    nc.variables["rayleigh_trans_upward"][
-        :, :, :, :, :, :, :, :, :
-    ] = rayleigh_trans_upward
-    nc.variables["rayleigh_trans_total"][
-        :, :, :, :, :, :, :, :, :
-    ] = rayleigh_trans_total
-
-    nc.variables["aerosol_trans_downward"][
-        :, :, :, :, :, :, :, :, :
-    ] = aerosol_trans_downward
-    nc.variables["aerosol_trans_upward"][
-        :, :, :, :, :, :, :, :, :
-    ] = aerosol_trans_upward
-    nc.variables["aerosol_trans_total"][:, :, :, :, :, :, :, :, :] = aerosol_trans_total
-
-    nc.variables["spherical_albedo_rayleigh"][
-        :, :, :, :, :, :, :, :, :
-    ] = spherical_albedo_rayleigh
-    nc.variables["spherical_albedo_aerosol"][
-        :, :, :, :, :, :, :, :, :
-    ] = spherical_albedo_aerosol
+    nc.variables["global_gas_trans_total"][
+    :, :, :, :, :, :, :, :, :
+    ] = gas_trans_total
+    nc.variables["total_scattering_trans_total"][
+    :, :, :, :, :, :, :, :, :
+    ] = total_scattering_trans_total
     nc.variables["spherical_albedo_total"][
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
-        :,
+        :, :, :, :, :, :, :, :, :,
     ] = spherical_albedo_total
 
     nc.close()

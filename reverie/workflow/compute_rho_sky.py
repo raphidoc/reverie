@@ -27,7 +27,7 @@ for ix in range(0, len(data["relative_azimuth_mean"])):
         raise ValueError("relative azimuth is not in a valid 0 - 360 range")
 
 rho_sky_nc.dimensions
-rho_sky_nc.variables["sky_glint"]
+rho_sky_nc.variables["surface"]
 
 res = sp.interpolate.interpn(
     points=(
@@ -38,7 +38,7 @@ res = sp.interpolate.interpn(
         rho_sky_nc.wind[()],
         rho_sky_nc.tau[()],
     ),
-    values=rho_sky_nc.variables["sky_glint"][:, :, :, :, :, :],
+    values=rho_sky_nc.variables["surface"][:, :, :, :, :, :],
     xi=(
         data["Wavelength"] * 1e-3,
         data["relative_azimuth_mean"],

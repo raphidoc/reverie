@@ -17,6 +17,7 @@ dependencies:
   - pendulum
   - charset-normalizer
   - shapely
+  - statsmodels
   - xarray
   - zarr
   - affine

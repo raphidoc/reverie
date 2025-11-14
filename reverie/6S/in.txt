@@ -1,15 +1,15 @@
 0 # Geometrical conditions (IGEOM)
-34.62 229.25 4.41 221.24 1 1
-2 # Atmospheric conditions, gas (IDATM)
+25 0 0 130 1 1
+0 # Atmospheric conditions, gas (IDATM)
 2 # Maritime aerosol model (IAER)
 0 # Visibility km
-0.04 # aot(550)
-0 # target altitude (XPS)
+1 # aot(550)
+1013 # target altitude (XPS)
 -3.0490 # Sensor altitude (XPP)
 -1.0 -1.0 # water vapor, ozone below the aircraft
 -1.0 # aot(550) below the aircraft
 -1 # Spectrum monochromatic selection (IWAVE)
-0.450 # Wavelength micron
+0.379 # Wavelength micron
 0 # Ground reflectance (INHOMO)
 0 # IDIREC
 0 # IGROUN

@@ -12,6 +12,7 @@ import numpy as np
 import pyproj
 import pandas as pd
 import geopandas as gpd
+from statsmodels.tsa.forecasting.theta import extend_index
 from tqdm import tqdm
 from p_tqdm import p_uimap
 import shapely
@@ -19,10 +20,11 @@ import xarray as xr
 import zarr
 import affine
 from rasterio.windows import Window
+from shapely.geometry import Point, box
 
 # REVERIE import
 from reverie.utils import helper, astronomy
-from reverie.utils.tile import Tile
+from reverie.image.tile import Tile
 from reverie.utils.cf_aliases import get_cf_std_name
 
 
@@ -154,8 +156,6 @@ class ReveCube(ABC):
         z = altitude_var[:][0]
         y = in_ds.variables["y"][:].data
         x = in_ds.variables["x"][:].data
-        lat = in_ds.variables["lat"][:].data
-        lon = in_ds.variables["lon"][:].data
         n_rows = in_ds.dims["y"]
         n_cols = in_ds.dims["x"]
 
@@ -175,8 +175,6 @@ class ReveCube(ABC):
             z,
             y,
             x,
-            lat,
-            lon,
             n_rows,
             n_cols,
             Affine,
@@ -193,8 +191,6 @@ class ReveCube(ABC):
         z: float,
         y: np.ndarray,
         x: np.ndarray,
-        lat: np.ndarray,
-        lon: np.ndarray,
         n_rows: int,
         n_cols: int,
         Affine,
@@ -214,12 +210,15 @@ class ReveCube(ABC):
         self.z = z
         self.y = y
         self.x = x
-        self.lon = lon
-        self.lat = lat
         self.n_rows = n_rows
         self.n_cols = n_cols
         self.Affine = Affine
         self.CRS = crs
+
+        self.center_lon = None
+        self.center_lat = None
+        self.lon_grid = None
+        self.lat_grid = None
 
         # Sensor attribute store metadata from the sensor in a dictionary
         self.sensor = {}
@@ -232,15 +231,11 @@ class ReveCube(ABC):
         self.valid_mask = None
         self.bad_band_list = None
 
+        self.water_mask = None
+
         # Time attributes
         self.acq_time_local = None
         self.central_lon_local_timezone = None
-
-        # Coordinates attributes
-        self.center_lon = None
-        self.center_lat = None
-        self.lon_grid = None
-        self.lat_grid = None
 
         # Geometric attributes
         self.sun_zenith = None
@@ -263,55 +258,74 @@ class ReveCube(ABC):
         wavelength: {self.wavelength}
         """
 
-    def cal_coordinate(self, affine, n_rows, n_cols, crs):
-        """
-        Compute the pixel coordinates
-
-        Parameters
-        ----------
-        affine: Affine transformation
-        n_rows: Number of rows
-        n_cols: Number of column
-        crs: pyproj CRS object
-
-        Returns
-        -------
-        x: projected pixel coordinates
-        y: projected pixel coordinates
-        longitude:
-        latitude:
-        center_longitude:
-        center_latitude:
-        """
+    # def cal_coordinate(self, affine, n_rows, n_cols, crs):
+    #     """
+    #     Compute the pixel coordinates
+    #
+    #     Parameters
+    #     ----------
+    #     affine: Affine transformation
+    #     n_rows: Number of rows
+    #     n_cols: Number of column
+    #     crs: pyproj CRS object
+    #
+    #     Returns
+    #     -------
+    #     x: projected pixel coordinates
+    #     y: projected pixel coordinates
+    #     longitude:
+    #     latitude:
+    #     center_longitude:
+    #     center_latitude:
+    #     """
+    #     logging.debug("calculating pixel coordinates")
+    #
+    #     # Define image projected coordinates from Affine tranformation
+    #     # TODO: it appear that x, y doesn't match lon lat ....
+    #     x, y = helper.transform_xy(
+    #         affine, rows=list(range(n_rows)), cols=list(range(n_cols))
+    #     )
+    #
+    #     # compute longitude and latitude from the projected coordinates
+    #     transformer = pyproj.Transformer.from_crs(crs.to_epsg(), 4326, always_xy=True)
+    #
+    #     xv, yv = np.meshgrid(x, y[0])
+    #     lon, _ = transformer.transform(xv, yv)
+    #     lon = lon[0, :]
+    #
+    #     xv, yv = np.meshgrid(x[0], y)
+    #     _, lat = transformer.transform(xv, yv)
+    #     lat = lat[:, 0]
+    #
+    #     # print(f"lat shape: {lat.shape}, lon shape: {lon.shape}")
+    #     logging.info(
+    #         f"n_rows({n_rows}) = y({len(y)}) = lat({len(lat)}) and n_cols({n_cols}) = x({len(x)}) = lon({len(lon)})"
+    #     )
+    #
+    #     self.x, self.y, self.lon, self.lat = (x, y, lon, lat)
+    #
+    def cal_coordinate(self, affine, n_rows, n_cols):
         logging.debug("calculating pixel coordinates")
 
-        # Define image projected coordinates from Affine tranformation
+        # Projected coordinates
         x, y = helper.transform_xy(
             affine, rows=list(range(n_rows)), cols=list(range(n_cols))
         )
 
-        # compute longitude and latitude from the projected coordinates
-        transformer = pyproj.Transformer.from_crs(crs.to_epsg(), 4326, always_xy=True)
-
-        xv, yv = np.meshgrid(x, y[0])
-        lon, _ = transformer.transform(xv, yv)
-        lon = lon[0, :]
-
-        xv, yv = np.meshgrid(x[0], y)
-        _, lat = transformer.transform(xv, yv)
-        lat = lat[:, 0]
-
-        # print(f"lat shape: {lat.shape}, lon shape: {lon.shape}")
         logging.info(
-            f"n_rows({n_rows}) = y({len(y)}) = lat({len(lat)}) and n_cols({n_cols}) = x({len(x)}) = lon({len(lon)})"
+            f"n_rows({n_rows}) = y({len(y)}) and "
+            f"n_cols({n_cols}) = x({len(x)})"
         )
 
-        self.x, self.y, self.lon, self.lat = (x, y, lon, lat)
+        self.x, self.y = x, y
 
-    def cal_coordinate_grid(self, lat, lon):
-        lat_grid, lon_grid = np.meshgrid(lat, lon)
-        lat_grid = np.swapaxes(lat_grid, 0, 1)
-        lon_grid = np.swapaxes(lon_grid, 0, 1)
+    def expand_coordinate(self):
+        # Transformer to WGS84
+        transformer = pyproj.Transformer.from_crs(self.CRS.to_epsg(), 4326, always_xy=True)
+
+        # 2D meshgrid for all pixel positions
+        xv, yv = np.meshgrid(self.x, self.y)
+        lon_grid, lat_grid = transformer.transform(xv, yv)
 
         central_lon = lon_grid[len(lat_grid[:, 0]) // 2, len(lon_grid[0, :]) // 2]
         central_lat = lat_grid[len(lat_grid[:, 0]) // 2, len(lon_grid[0, :]) // 2]
@@ -375,20 +389,24 @@ class ReveCube(ABC):
         self.sun_zenith[~self.get_valid_mask()] = np.nan
         self.sun_azimuth[~self.get_valid_mask()] = np.nan
 
-    def get_valid_mask(self, tile: Tile = None):
+    def get_valid_mask(self, window: Window = None):
         """
         Get the valid mask for the enire image or a specific tile
-        :param tile: an object of class tile.Tile()
+        :param window: an object of class Window
         :return:[]
         """
         # logging.debug("geting valid mask")
         if self.valid_mask is None:
             self.cal_valid_mask()
-        if tile is None:
+        if window is None:
             return self.valid_mask
         else:
+            y_start = int(window.row_off)
+            y_stop = y_start + int(window.height)
+            x_start = int(window.col_off)
+            x_stop = x_start + int(window.width)
             #return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
-            return self.valid_mask[tile.spixl : tile.epixl, tile.sline : tile.eline]
+            return self.valid_mask[y_start : y_stop, x_start : x_stop]
 
     def cal_valid_mask(self):
         """
@@ -401,8 +419,74 @@ class ReveCube(ABC):
             for name, data in self.in_ds.data_vars.items():
                 if data.dims == ("wavelength", "y", "x"):
                     # TODO: some bands might be full of NA, refer to attribute bad_band_list
-                    self.valid_mask = data.isel(wavelength=50).notnull().data
+                    self.valid_mask = data.isel(wavelength=60).notnull().data
                     break
+
+    def get_water_mask(self,  window: Window = None):
+        """
+        Get the water mask for the enire image or a specific tile
+        :param window: an object of class Window
+        :return:[]
+        """
+        # logging.debug("geting valid mask")
+        if self.water_mask is None:
+            self.cal_water_mask()
+        if window is None:
+            return self.water_mask
+        else:
+            y_start = int(window.row_off)
+            y_stop = y_start + int(window.height)
+            x_start = int(window.col_off)
+            x_stop = x_start + int(window.width)
+            #return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
+            return self.water_mask[y_start : y_stop, x_start : x_stop]
+
+    def cal_water_mask(self):
+        """
+        Calculate the mask of water pixel for the entire image (NDWI > 0)
+        :return: valid_mask
+        """
+        logging.debug("calculating valid mask")
+        if self.water_mask is None:
+
+            blue_i = np.abs(self.in_ds.wavelength.values - 490).argmin()
+            green_i = np.abs(self.in_ds.wavelength.values - 560).argmin()
+            nir_i = np.abs(self.in_ds.wavelength.values - 1000).argmin()
+
+            blue = self.in_ds.radiance_at_sensor.isel(wavelength=blue_i)
+            green = self.in_ds.radiance_at_sensor.isel(wavelength=green_i)
+            nir = self.in_ds.radiance_at_sensor.isel(wavelength=nir_i)
+
+            self.ndwi = (green - nir) / (green + nir)
+
+            s_vis_nir = nir / (blue + green)
+
+            ### DEV
+
+            import matplotlib.pyplot as plt
+
+            plt.imshow(s_vis_nir, cmap='viridis')  # 'viridis' is a good default colormap
+            plt.colorbar(label='Slope Intensity')
+            plt.title('NDWI Matrix')
+            plt.xlabel('X')
+            plt.ylabel('Y')
+            plt.show()
+
+            ### DEV
+
+            self.water_mask = None
+
+    def filter_bad_band(self):
+        # filter image for bad bands
+        bad_band_list = self.in_ds["radiance_at_sensor"].bad_band_list
+        if isinstance(bad_band_list, str):
+            bad_band_list = str.split(bad_band_list, ", ")
+
+        bad_band_list = np.array(bad_band_list)
+        good_band_indices = np.where(bad_band_list == "1")[0]
+        good_bands_slice = slice(min(good_band_indices), max(good_band_indices) + 1)
+        self.in_ds = self.in_ds.isel(wavelength=good_bands_slice)
+
 
     def read_band(self, bandindex, tile: Tile = None):
         """
@@ -512,11 +596,11 @@ class ReveCube(ABC):
         y_var.axis = "y"
         y_var[:] = self.y
 
-        lat_var = nc_ds.createVariable("lat", "f8", ("y",))
-        lat_var.standard_name = "latitude"
-        lat_var.units = "degrees_north"
-        # lat_var.long_name = 'latitude'
-        lat_var[:] = self.lat
+        # lat_var = nc_ds.createVariable("lat", "f8", ("y",))
+        # lat_var.standard_name = "latitude"
+        # lat_var.units = "degrees_north"
+        # # lat_var.long_name = 'latitude'
+        # lat_var[:] = self.lat
 
         x_var = nc_ds.createVariable("x", "f8", ("x",))
         x_var.units = "m"
@@ -525,11 +609,11 @@ class ReveCube(ABC):
         x_var.axis = "x"
         x_var[:] = self.x
 
-        lon_var = nc_ds.createVariable("lon", "f8", ("x",))
-        lon_var.standard_name = "longitude"
-        lon_var.units = "degrees_east"
-        # lon_var.long_name = 'longitude'
-        lon_var[:] = self.lon
+        # lon_var = nc_ds.createVariable("lon", "f8", ("x",))
+        # lon_var.standard_name = "longitude"
+        # lon_var.units = "degrees_east"
+        # # lon_var.long_name = 'longitude'
+        # lon_var[:] = self.lon
 
         # grid_mapping
         crs = self.CRS
@@ -540,19 +624,18 @@ class ReveCube(ABC):
 
         # Fix GDAL projection issue by providing the attributes spatial_ref and GeoTranform
         # GeoTransform is an affine transform array defined by GDAL with parameters in the orders:
-        GT0 = 541107.0  # x coordinate of the upper-left corner of the upper-left pixel
-        GT1 = 1.5  # w-e pixel resolution / pixel width.
-        GT2 = 0  # row rotation (typically zero).
-        GT3 = (
-            5438536.5  # y-coordinate of the upper-left corner of the upper-left pixel.
-        )
-        GT4 = 0  # column rotation (typically zero).
-        GT5 = 1.5  # n-s pixel resolution / pixel height (negative value for a north-up image).
-        #
+        # GT0 = 541107.0  # x coordinate of the upper-left corner of the upper-left pixel
+        # GT1 = 1.5  # w-e pixel resolution / pixel width.
+        # GT2 = 0  # row rotation (typically zero).
+        # GT3 = (
+        #     5438536.5  # y-coordinate of the upper-left corner of the upper-left pixel.
+        # )
+        # GT4 = 0  # column rotation (typically zero).
+        # GT5 = 1.5  # n-s pixel resolution / pixel height (negative value for a north-up image).
+        # grid_mapping.GeoTransform = f"{GT0} {GT1} {GT2} {GT3} {GT4} {GT5}"
         # raise "Implement this first !"
 
         grid_mapping.spatial_ref = cf_grid_mapping["crs_wkt"]
-        grid_mapping.GeoTransform = f"{GT0} {GT1} {GT2} {GT3} {GT4} {GT5}"
 
         grid_mapping.grid_mapping_name = cf_grid_mapping["grid_mapping_name"]
         grid_mapping.crs_wkt = cf_grid_mapping["crs_wkt"]
@@ -721,6 +804,7 @@ class ReveCube(ABC):
         var_name: list = None,
         max_time_diff: float = None,
         window_size: int = 1,
+        output_box: str = None
     ):
         """
         Extract pixel value from a list of in-situ data
@@ -802,7 +886,7 @@ class ReveCube(ABC):
         # # Write the GeoDataFrame to a GeoJSON file
         # # footprint_gdf.to_file("footprint.geojson", driver="GeoJSON")
 
-        # Step 3: Perform a spatial join between the matchup_gdf and the polygons_gdf
+        # Perform a spatial join between the matchup_gdf and the polygons_gdf
         footprint_gdf = self.get_footprint()
 
         filtered_gdf = gpd.sjoin(
@@ -821,42 +905,81 @@ class ReveCube(ABC):
         for uuid in tqdm(filtered_gdf["uuid"]):
             temp_gdf = filtered_gdf[filtered_gdf["uuid"] == uuid].reset_index()
 
-            # Get the nearest pixel index at coordinates
-            # The line of code `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()` is used to find the index of the pixel that is closest to a specific geographic coordinate.
-            #
-            # - `shapely.get_x(temp_gdf.geometry)[0]`: This extracts the x-coordinate (longitude) of the first geometry (point) in the GeoDataFrame `temp_gdf`.
-            #
-            # - `x_coords - shapely.get_x(temp_gdf.geometry)[0]`: This calculates the difference between each x-coordinate in the `x_coords` array and the extracted longitude. The result is an array of differences.
-            #
-            # - `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0])`: The `np.abs` function takes the absolute value of each difference, effectively giving the distance of each pixel to the specific longitude.
-            #
-            # - `np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()`: Finally, the `argmin` function is used to find the index of the smallest value in the array of distances. This is the index of the pixel that is closest to the specific longitude.
+            # Make sure coordinates are in raster CRS
             x_coords, y_coords = xr_ds.x.values, xr_ds.y.values
-            x_index = np.abs(x_coords - shapely.get_x(temp_gdf.geometry)[0]).argmin()
-            y_index = np.abs(y_coords - shapely.get_y(temp_gdf.geometry)[0]).argmin()
+            x_pt = temp_gdf.geometry.x.iloc[0]
+            y_pt = temp_gdf.geometry.y.iloc[0]
 
-            # Create a window around the pixel to extract
-            # The `slice` function in Python is used to get a specific portion of a sequence (like a list, tuple, string, etc.). In this case, it's being used to select a specific range of indices from an array.
-            #
-            # - `x_index - half_window`: This calculates the starting index of the window. It's the index of the selected pixel minus half the window size. This would be the left boundary of the window if `x_index` is greater than `half_window`.
-            #
-            # - `max(0, x_index - half_window)`: The `max` function is used to ensure that the starting index of the window doesn't go below 0 (which would be out of bounds). If `x_index - half_window` is less than 0, it will use 0 as the starting index.
-            #
-            # - `x_index + half_window + 1`: This calculates the ending index of the window. It's the index of the selected pixel plus half the window size. The `+ 1` is necessary because the end index in a slice is exclusive (i.e., the slice includes up to, but not including, the end index).
-            #
-            # So, `slice(max(0, x_index - half_window), x_index + half_window + 1)` creates a slice object that represents the indices of the window around the selected pixel. This slice object can then be used to select the window from the xarray Dataset.
+            x_index = np.abs(x_coords - x_pt).argmin()
+            y_index = np.abs(y_coords - y_pt).argmin()
+
             half_window = window_size // 2
             data_sel = xr_ds.isel(
                 y=slice(max(0, y_index - half_window), y_index + half_window + 1),
                 x=slice(max(0, x_index - half_window), x_index + half_window + 1),
             )
 
+            # print("UTM20N x = " + str(data_sel.x[1].item()))
+            # print("UTM20N y = " + str(data_sel.y[1].item()))
+            #
+            # # Get UTM20N x, y values
+            # x = data_sel.x[1].item()
+            # y = data_sel.y[1].item()
+            #
+            # # Define the transformer from UTM20N (EPSG:32620) to WGS84 (EPSG:4326)
+            # transformer = pyproj.Transformer.from_crs("EPSG:32620", "EPSG:4326", always_xy=True)
+            #
+            # lon, lat = transformer.transform(x, y)
+            #
+            # print("lat = " + str(lat))
+            # print("lon = " + str(lon))
+
+            # Pick the exact pixel center in lat/lon
+            # lat = xr_ds.lat.isel(y=y_index).item()
+            # lon = xr_ds.lon.isel(x=x_index).item()
+
+            # print("lat = " + str(lat))
+            # print("lon = " + str(lon))
+            #
+            # import pyproj
+            #
+            # # Define the transformer from WGS84 (EPSG:4326) to UTM20N (EPSG:32620)
+            # transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32620", always_xy=True)
+            #
+            # x, y = transformer.transform(lon, lat)
+            #
+            # print("UTM20N x = " + str(x))
+            # print("UTM20N y = " + str(y))
+
+            # Point geometry (same CRS as raster)
+            point_geom = gpd.GeoDataFrame(
+                {'uuid': [uuid]},
+                geometry=[Point(data_sel.x[half_window], data_sel.y[half_window])],
+                crs=self.CRS.to_epsg()
+            )
+
+            point_geom.to_file(os.path.join(output_box, f"{uuid}_point.geojson"), driver="GeoJSON")
+
+            # Window bounds
+            win = Window.from_slices(
+                rows=slice(max(0, y_index - half_window), y_index + half_window + 1),
+                cols=slice(max(0, x_index - half_window), x_index + half_window + 1),
+            )
+            window_dict[uuid] = win
             window_data[uuid] = data_sel
 
-            window_dict[uuid] = Window.from_slices(
-                cols=slice(max(0, y_index - half_window), y_index + half_window + 1),
-                rows=slice(max(0, x_index - half_window), x_index + half_window + 1),
-            )
+            # y_start, y_stop = int(win.row_off), int(win.row_off + win.height)
+            # x_start, x_stop = int(win.col_off), int(win.col_off + win.width)
+            #
+            # x0, y0 = helper.transform_xy(self.Affine, rows=[y_start - 0.5], cols=[x_start - 0.5])
+            # x1, y1 = helper.transform_xy(self.Affine, rows=[y_stop - 0.5], cols=[x_stop - 0.5])
+            #
+            # box_geom = gpd.GeoDataFrame(
+            #     {'uuid': [uuid]},
+            #     geometry=[box(x0[0], y0[0], x1[0], y1[0])],
+            #     crs=self.CRS.to_epsg()
+            # )
+            # box_geom.to_file(os.path.join(output_box, f"{self.image_name}_windows.geojson"), driver="GeoJSON")
 
             # import holoviews as hv
             # from holoviews import opts
@@ -890,25 +1013,10 @@ class ReveCube(ABC):
             #
             # pn.serve(plot)
 
-            # import matplotlib.pyplot as plt
-            # import cartopy.crs as ccrs
-            #
-            # p = data_sel.sel(W=443, method="nearest").radiance_at_sensor.plot(
-            #     subplot_kws=dict(
-            #         projection=ccrs.Orthographic(-80, 35), facecolor="gray"
-            #     ),
-            #     transform=ccrs.PlateCarree(),
-            # )
-            #
-            # p.axes.set_global()
-            # p.axes.coastlines()
-            #
-            # plt.show()
-
             temp_pixex_df = data_sel.to_dataframe()
             # temp_pixex_df = temp_pixex_df.rename_axis("Wavelength")
             # temp_pixex_df = temp_pixex_df.reset_index()
-            # TODO output a wide format when wavelength and non wavelength data are mixed
+            # TODO output a wide format when wavelength and non wavelength data are mixed ?
             # temp_pixex_df = pd.pivot(temp_pixex_df, index=['x', 'y'], columns='Wavelength', values='radiance_at_sensor')
             temp_pixex_df["uuid"] = uuid
             temp_pixex_df["image_name"] = self.image_name
@@ -918,19 +1026,44 @@ class ReveCube(ABC):
 
             pixex_df = pd.concat([pixex_df, temp_pixex_df], axis=0)
 
+        if os.path.isdir(output_box):
+
+            polygons = []
+            uuids = []
+
+            for uuid, window in window_dict.items():
+                # Get pixel coordinates from window slices
+                y_start = int(window.row_off)
+                y_stop = y_start + int(window.height)
+                x_start = int(window.col_off)
+                x_stop = x_start + int(window.width)
+
+                # Get projected coordinates using affine transform
+                x0, y0 = helper.transform_xy(self.Affine, rows=[y_start - 0.5], cols=[x_start - 0.5])
+                x1, y1 = helper.transform_xy(self.Affine, rows=[y_stop - 0.5], cols=[x_stop - 0.5])
+
+                # Create polygon (bounding box)
+                poly = box(x0[0], y0[0], x1[0], y1[0])
+                polygons.append(poly)
+                uuids.append(uuid)
+
+            gdf = gpd.GeoDataFrame({'uuid': uuids, 'geometry': polygons}, crs=self.CRS.to_epsg())
+            geojson_path = os.path.join(output_box, self.image_name + "_windows.geojson")
+            gdf.to_file(geojson_path, driver="GeoJSON")
+
         return pixex_df, window_dict, window_data
 
     def extract_pixel_line(self, line_index: int, line_window: int):
         xr_ds = self.in_ds
 
-        # Step 1: Stack the 'y' and 'x' dimensions into a single dimension 'yx'
+        # Stack the 'y' and 'x' dimensions into a single dimension 'yx'
         stacked_ds = xr_ds.stack(yx=("y", "x"))
 
-        # Step 2: Assign 'LineIndex' as a coordinate to the stacked Dataset
+        # Assign 'LineIndex' as a coordinate to the stacked Dataset
         LineIndex = xr_ds["LineIndex"].values.flatten()
         stacked_ds = stacked_ds.assign_coords(LineIndex=("yx", LineIndex))
 
-        # Step 3: Swap the 'yx' dimension with 'LineIndex'
+        # Swap the 'yx' dimension with 'LineIndex'
         xr_ds_swapped = stacked_ds.swap_dims({"yx": "LineIndex"})
 
         # Method of transforming LineIndex as a coordinate variable and reindexing the dataset onto it

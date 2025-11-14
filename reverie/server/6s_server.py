@@ -141,7 +141,9 @@ def run_model_and_accumulate(start, end, commands, y):
 
         temp = json.loads(process.stdout)
 
-        y[i] = float(temp["atmospheric_reflectance_at_sensor"])
+        # y[i] = float(temp["atmospheric_reflectance_at_sensor"])
+
+        y[i] = temp["diffuse_atmospheric_irradiance_at_target_[W m-2 um-1]"]/temp["direct_solar_irradiance_at_target_[W m-2 um-1]"]
         counter += 1
 
     return
