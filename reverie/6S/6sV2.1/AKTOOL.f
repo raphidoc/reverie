@@ -920,7 +920,7 @@ c     ******************************************************************
 c     STERN F.,  1964,  Transmission of isotropic radiation across an
 c     interface between two dielectrics,  Appl.Opt.,  Vol.3,  1:111-113
 c     ALLEN W.A.,  1973,  Transmission of isotropic light across a
-c     dielectric surface in two and three dimensions,  J.Opt.Soc.Am.,
+c     dielectric surface in two and three dims,  J.Opt.Soc.Am.,
 c     Vol.63,  6:664-666
 c     ******************************************************************
 

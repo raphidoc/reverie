@@ -478,14 +478,14 @@ class PrismaHe5(ReveCube):
         # Create radiometric variable
         # ACOLITE doesn't use a scale factor
         self.create_var_nc(
-            var="rho_w",
-            datatype="f4",
-            dimensions=(
+            name="rho_w",
+            type="f4",
+            dims=(
                 "W",
                 "Y",
                 "X",
             ),
-            scale_factor=1,
+            scale=1,
         )
 
         for var_name, wavelength in tqdm(
@@ -508,18 +508,18 @@ class PrismaHe5(ReveCube):
         #     "SampleIndex": self.sample_index,
         # }
         #
-        # for var in tqdm(geom, desc="Writing geometry"):
+        # for name in tqdm(geom, desc="Writing geometry"):
         #     self.create_var_nc(
-        #         var=var,
-        #         dimensions=(
+        #         name=name,
+        #         dims=(
         #             "Y",
         #             "X",
         #         ),
         #     )
         #
-        #     geom[var][np.isnan(geom[var])] = self.no_data * self.scale_factor
+        #     geom[name][np.isnan(geom[name])] = self.no_data * self.scale
         #
-        #     self.out_ds.variables[var][:, :] = geom[var]
+        #     self.out_ds.variables[name][:, :] = geom[name]
 
         self.out_ds.close()
         return

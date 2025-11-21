@@ -99,7 +99,7 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
         "w",
         format="NETCDF4",
     )
-    # Create the dimensions
+    # Create the dims
 
     nc.createDimension("sol_zen", len(coords["sol_zen"]))
     nc.createDimension("view_zen", len(coords["view_zen"]))
@@ -257,8 +257,8 @@ if __name__ == "__main__":
     #     # 3.750,
     # ]
 
-    # Define your dimensions here
-    # dimensions = [
+    # Define your dims here
+    # dims = [
     #     np.arange(10, 61, 10).tolist(),  # sun zenith
     #     np.arange(0, 31, 10).tolist(),  # view zenith
     #     np.arange(0, 181, 10).tolist(),  # relative azimuth
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     ]
 
     # Test dimension
-    # dimensions = [
+    # dims = [
     #     np.arange(30, 31, 10).tolist(),  # sun zenith
     #     np.arange(0, 10, 10).tolist(),  # view zenith
     #     np.arange(80, 81, 10).tolist(),  # relative azimuth
@@ -446,7 +446,7 @@ if __name__ == "__main__":
 
     nc = create_gas_output_nc(os.path.join(output_dir, "lut_gas.nc"), coords)
 
-    # Get the shape of the dimensions
+    # Get the shape of the dims
     shape = [len(dimension) for dimension in dimensions]
 
     atmospheric_reflectance_at_sensor = np.reshape(atmospheric_reflectance_at_sensor, shape)

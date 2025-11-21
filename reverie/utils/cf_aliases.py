@@ -10,7 +10,7 @@ The xml table could be parsed for automatic retrieval of standard names, but thi
 # import xmltodict
 # from defusedxml.dom.minidom import parse, parseString, Node
 # import defusedxml.ElementTree as ET
-
+import warnings
 
 def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
     std_name = None
@@ -36,6 +36,11 @@ def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
         std_name = "water_leaving_reflectance"
         std_unit = "1"
 
+    # Standard ?
+    if alias in ["rho_surface"]:
+        std_name = "surface_reflectance"
+        std_unit = "1"
+
     if alias in ["rho_remote_sensing"]:
         std_name = "surface_ratio_of_upwelling_radiance_emerging_from_sea_water_to_downwelling_radiative_flux_in_air"
         std_unit = "sr-1"
@@ -43,6 +48,24 @@ def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
     if alias in ["F0"]:
         std_name = "solar_irradiance_per_unit_wavelength"
         std_unit = "W cm-2 nm-1"
+
+    # Indices
+    if alias in ['ndwi']:
+        std_name = 'normalized_difference_water_index'
+        std_unit = 'unitless'
+
+    if alias in ['ndvi']:
+        std_name = 'normalized_difference_vegetation_index'
+        std_unit = 'unitless'
+
+    if alias in ['s_vis_nir']:
+        std_name = 's_vis_nir'
+        std_unit = 'unitless'
+
+    # Mask
+    if alias in ['mask_water']:
+        std_name = 'mask_water'
+        std_unit = 'boolean'
 
     # Geometric quantities:
     # solar_azimuth_angle [degree]
@@ -86,7 +109,9 @@ def get_cf_std_name(url=None, alias: str = "radiance_at_sensor"):
         std_unit = ""
 
     if std_name is None:
-        raise Exception(f"No match for {alias}")
+        warnings.warn(f"No match for {alias}")
+        std_name = "NA"
+        std_unit = "NA"
 
     # TODO: automate retrieval of standard from the XML table at:
     #  http://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml

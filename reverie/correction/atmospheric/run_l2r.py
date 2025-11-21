@@ -1,0 +1,406 @@
+import logging
+import math
+import os
+import shutil
+
+from scipy import stats
+import xarray as xr
+import pandas as pd
+import numpy as np
+import scipy.interpolate as sp
+from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
+import re
+import glob
+from scipy.interpolate import RegularGridInterpolator
+import multiprocessing
+from functools import partial
+import math
+
+from rasterio.windows import Window
+
+from reverie import ReveCube
+import reverie.correction.atmospheric.get_atmosphere as atm
+from reverie.correction.surface.rayleigh import get_sky_glint
+import dsf
+import lut
+
+
+def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_interp, mask_water):
+
+    l1 = ReveCube.from_reve_nc(l1_path)
+
+    y_slice = slice(int(window.row_off), int(window.row_off + window.height))
+    x_slice = slice(int(window.col_off), int(window.col_off + window.width))
+
+    ra_components = atm.get_ra(l1, window, l1.wavelength, aod555_dsf, *aero_interps)
+    gas_component = atm.get_gas(l1, window, l1.wavelength, gas_interp)
+
+    image_sub = l1.in_ds.isel(x=x_slice, y=y_slice)
+    rho_t = image_sub["rho_at_sensor"]
+
+    rho_path_ra = ra_components["rho_path"].values
+    t_ra = ra_components["trans_ra"].values
+    s_ra = ra_components["spherical_albedo_ra"].values
+    t_g = gas_component["t_gas"].values
+
+    rho_path = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
+    rho_s = (rho_t - rho_path) / (t_ra * t_g + s_ra * (rho_t - rho_path))
+
+    theta_0 = np.deg2rad(image_sub["sun_zenith"])
+    theta_v = np.deg2rad(image_sub["view_zenith"])
+    phi_0 = np.deg2rad(image_sub["sun_azimuth"])
+    phi_v = np.deg2rad(image_sub["view_azimuth"])
+
+    sky_glint = get_sky_glint(l1.wavelength, theta_0, theta_v, phi_0, phi_v, 1007)
+
+    mask_water_window = mask_water[y_slice, x_slice]
+    rho_w = np.where(mask_water_window, rho_s - sky_glint, np.nan)
+
+    y_coords = l1.in_ds["y"].isel(y=y_slice)
+    x_coords = l1.in_ds["x"].isel(x=x_slice)
+    wl_coords = l1.wavelength
+
+    out_path = os.path.join(
+        output_dir,
+        f"rho_surface_window_{window.row_off}-{window.row_off+window.height}_{window.col_off}-{window.col_off+window.width}.nc")
+
+    ds_out = xr.Dataset(
+        {
+            "rho_surface": xr.DataArray(
+                rho_s,
+                dims=["wavelength", "y", "x"],
+                coords={
+                    "wavelength": wl_coords,
+                    "y": y_coords,
+                    "x": x_coords,
+                },
+            ),
+            "rho_w": xr.DataArray(
+                rho_w,
+                dims=["wavelength", "y", "x"],
+                coords={
+                    "wavelength": wl_coords,
+                    "y": y_coords,
+                    "x": x_coords,
+                },
+            ),
+        }
+    )
+
+    ds_out.to_netcdf(out_path)
+
+    ### DEV
+
+    # import matplotlib.pyplot as plt
+    #
+    # # Select indices for blue, green, red bands
+    # blue_i = np.abs(wl_coords - 470).argmin()
+    # green_i = np.abs(wl_coords - 550).argmin()
+    # red_i = np.abs(wl_coords - 650).argmin()
+    #
+    # # Extract and normalize each band
+    # rgb = np.stack([
+    #     rho_w[red_i],  # Red
+    #     rho_w[green_i],  # Green
+    #     rho_w[blue_i],  # Blue
+    # ], axis=-1)
+    #
+    # # Normalize to [0, 1] for display
+    # rgb_min = np.nanmin(rgb)
+    # rgb_max = np.nanmax(rgb)
+    # rgb_norm = (rgb - rgb_min) / (rgb_max - rgb_min)
+    # rgb_norm = np.clip(rgb_norm, 0, 1)
+    #
+    # plt.imshow(rgb_norm)
+    # plt.title("rho_w RGB composite")
+    # plt.axis("off")
+    # plt.show()
+
+    ### DEV
+
+
+    return out_path
+
+def run_l2r(l1, gain = None):
+
+    out_name = re.sub(r'l1\w+', 'l2r', l1.in_path)
+    scale_factor = 1e-5 # NetCDF divide by scale when writing data and multiply when reading
+    l1.create_reve_nc(out_name)
+
+    wavelength = l1.wavelength
+
+    # Create rho_dark spectrum with corresponding pixel values
+    rho_t = l1.in_ds.rho_at_sensor
+    sol_zen = l1.in_ds.sun_zenith.values.astype(np.float32)
+    view_zen = l1.in_ds.view_zenith.values.astype(np.float32)
+    sol_azi = l1.in_ds.sun_azimuth.values.astype(np.float32)
+    view_azi = l1.in_ds.view_azimuth.values.astype(np.float32)
+    relative_azimuth = l1.in_ds.relative_azimuth.values.astype(np.float32)
+    mask_water = l1.in_ds.mask_water.values.astype(bool)
+
+    rho_dark = np.full_like(wavelength, np.nan)
+    sol_zen_dark = np.full_like(wavelength, np.nan)
+    view_zen_dark = np.full_like(wavelength, np.nan)
+    sol_azi_dark = np.full_like(wavelength, np.nan)
+    view_azi_dark = np.full_like(wavelength, np.nan)
+    relative_azimuth_dark = np.full_like(wavelength, np.nan)
+    mask_water_dark = np.full_like(wavelength, np.nan)
+
+    args_list = [(i, wl, rho_t, sol_zen, view_zen, sol_azi, view_azi, relative_azimuth, mask_water) for i, wl in enumerate(wavelength)]
+    results = process_map(
+        dsf.compute_rho_dark,
+        args_list,
+        max_workers=os.cpu_count() -2,
+        desc="Computing rho_dark in parallel"
+    )
+
+    for i, sol_zen_val, view_zen_val, sol_azi_val, view_azi_val, relative_azimuth_val, rho_dark_val, mask_water_val in results:
+        rho_dark[i] = rho_dark_val
+        sol_zen_dark[i] = sol_zen_val
+        view_zen_dark[i] = view_zen_val
+        sol_azi_dark[i] = view_zen_val
+        view_azi_dark[i] = view_zen_val
+        relative_azimuth_dark[i] = relative_azimuth_val
+        mask_water_dark[i] = mask_water_val
+
+    if np.any(mask_water_dark):
+        logging.debug("dark pixel found in water")
+
+    # Interpolate rho_path to rho_dark and get the corresponding aod555 value
+    target_pressure = l1.in_ds.surface_air_pressure.values
+    sensor_altitude = l1.in_ds.z.values
+    water = l1.in_ds.atmosphere_mass_content_of_water_vapor.values
+    ozone = l1.in_ds.equivalent_thickness_at_stp_of_atmosphere_ozone_content.values
+
+    aod555_dsf = dsf.aot555_dsf(
+        wavelength[~np.isnan(sol_zen_dark)],
+        rho_dark[~np.isnan(sol_zen_dark)],
+        sol_zen_dark[~np.isnan(sol_zen_dark)],
+        view_zen_dark[~np.isnan(sol_zen_dark)],
+        sol_azi_dark[~np.isnan(sol_zen_dark)],
+        view_azi_dark[~np.isnan(sol_zen_dark)],
+        relative_azimuth_dark[~np.isnan(sol_zen_dark)],
+        target_pressure,
+        sensor_altitude,
+        water,
+        ozone,
+        mask_water_dark,
+        name = l1.image_name
+    )
+
+    # aod555_dsf = 0.055
+
+    # Determine the available RAM size
+    # ram_gb = helper.get_available_ram_gb() - 4
+
+    # Estimate the corresponding window size (including wavelength)
+    # window_size = estimate_window_size(l1, wavelength, ram_gb)
+    window_size = 500
+
+    # Divide the image in windows
+    windows = l1.create_windows(window_size)
+
+    logging.info(
+        f"{len(windows)} windows to process at {window_size} pixels"
+    )
+
+    non_empty_windows = []
+    for window in tqdm(windows, desc="Filtering windows"):
+        y_slice = slice(window.row_off, window.row_off + window.height)
+        x_slice = slice(window.col_off, window.col_off + window.width)
+
+        rho_t = l1.in_ds.isel(
+            x=x_slice,
+            y=y_slice
+        )["rho_at_sensor"]
+
+        if not np.isnan(rho_t).all():
+            non_empty_windows.append(window)
+        else:
+            l1.out_ds.variables["rho_surface"][:, y_slice, x_slice] = l1.no_data * scale_factor
+
+    logging.info(
+        f"{len(non_empty_windows)}  non empty windows to process"
+    )
+
+    output_dir = os.path.join(os.path.dirname(l1.in_path),"temp_windows_"+l1.image_name)  # Must exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    aero_interps, aero_points = atm.build_aer_interpolators(lut.load_aer())
+    gas_interp, gas_points = atm.build_gas_interpolator(lut.load_gas())
+
+    process_func = partial(
+        process_window,
+        l1_path=l1.in_path,
+        output_dir=output_dir,
+        aod555_dsf=aod555_dsf,
+        aero_interps=list(aero_interps.values()),
+        gas_interp=gas_interp,
+        mask_water=mask_water
+    )
+
+    results = process_map(
+        process_func,
+        non_empty_windows,
+        max_workers = 8, #os.cpu_count() - 2,
+        desc="Processing windows in parallel"
+    )
+
+    logging.debug("Merging results")
+    all_files = sorted(glob.glob(f"{output_dir}/rho_surface_window_*.nc"))
+    ds = xr.open_mfdataset(all_files, combine="by_coords")
+    # ds.to_netcdf("final_rho_surface.nc")
+
+    l1.create_var_nc(name="rho_surface", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+    l1.create_var_nc(name="rho_w", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+
+    for i in tqdm(range(len(wavelength)), desc="Copying by wavelength in final ds:"):
+        rho_s = ds["rho_surface"][i, :, :].values
+        np.nan_to_num(rho_s, copy=False, nan=l1.no_data * scale_factor)
+        rho_w = ds["rho_w"][i, :, :].values
+        np.nan_to_num(rho_w, copy=False, nan=l1.no_data * scale_factor)
+
+        l1.out_ds["rho_surface"][i, :, :] = rho_s
+        l1.out_ds["rho_w"][i, :, :] = rho_w
+
+
+    l1.out_ds["rho_surface"].aod555_dsf = aod555_dsf
+
+    # aer_lut = lut.load_aer()
+    # gas_lut = lut.load_gas()
+    # aero_interps, aer_points = atm.build_aer_interpolators(aer_lut)
+    # gas_interp, gas_points = atm.build_gas_interpolator(gas_lut)
+    # interp_rho, interp_t, interp_s = aero_interps.values()
+    # interp_tgas = gas_interp
+    #
+    # for window in tqdm(non_empty_windows, desc="Processing windows"):
+    #     y_slice = slice(int(window.row_off), int(window.row_off + window.height))
+    #     x_slice = slice(int(window.col_off), int(window.col_off + window.width))
+    #
+    #     rho_t = l1.in_ds.isel(
+    #         x=x_slice,
+    #         y=y_slice
+    #     )["rho_at_sensor"]
+    #
+    #     ra_components = atm.get_ra(l1, window, wavelength, aod555_dsf, interp_rho, interp_t, interp_s)
+    #     gas_component = atm.get_gas(l1, window, wavelength, interp_tgas)
+    #     rho_path_ra = ra_components["rho_path"].values
+    #     t_ra = ra_components["trans_ra"].values
+    #     s_ra = ra_components["spherical_albedo_ra"].values
+    #     t_g = gas_component["t_gas"].values
+    #
+    #     # rho_path_ra, t_ra, s_ra = atm.get_ra_vectorized(l1, window, wavelength, aod555_dsf, interp_rho, interp_t, interp_s)
+    #     # t_g = atm.get_gas_vectorized(l1, window, wavelength, interp_tgas)
+    #
+    #     rho_path = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
+    #
+    #     rho_s = (rho_t - rho_path) / (t_ra * t_g + s_ra * (rho_t - rho_path))
+    #
+    #     np.nan_to_num(rho_s, copy=False, nan=l1.no_data * scale)
+    #     l1.out_ds.variables["rho_surface"][:, y_slice, x_slice] = rho_s
+
+    # Create indices and mask
+    logging.debug("Computing masks from rho_s")
+
+    blue_i = np.abs(wavelength - 400).argmin()
+    green_i = np.abs(wavelength - 550).argmin()
+    red_i = np.abs(wavelength - 600).argmin()
+    nir_i = np.abs(wavelength - 850).argmin()
+    swir_i = np.abs(wavelength - 2190).argmin()
+
+    rho_s = ds["rho_surface"].values
+
+    blue = rho_s[blue_i, :, :]
+    green = rho_s[green_i, :, :]
+    red = rho_s[red_i, :, :]
+    nir = rho_s[nir_i, :, :]
+    swir = rho_s[swir_i, :, :]
+
+    ndwi = (green - swir) / (green + swir)
+    ndvi = (nir - red) / (nir + red)
+    s_vis_nir = nir / (blue + green)
+
+    # mask_water = ((ndwi > 0) & (ndvi < 0.1)).astype(int)
+    valid_mask = l1.get_valid_mask()
+    mask_water = np.full(valid_mask.shape, np.nan, dtype=float)
+    mask_water[valid_mask] = (ndwi > 0)[valid_mask]
+
+    l1.create_var_nc(name="ndwi", type="i4", dims=("y", "x"), comp="zlib", scale=scale_factor)
+    l1.create_var_nc(name="ndvi", type="i4", dims=("y","x"), comp="zlib", scale=scale_factor)
+    l1.create_var_nc(name="s_vis_nir", type="i4", dims=("y", "x"), comp="zlib", scale=scale_factor)
+
+    np.nan_to_num(ndwi, copy=False, nan=l1.no_data * scale_factor)
+    np.nan_to_num(ndvi, copy=False, nan=l1.no_data * scale_factor)
+    np.nan_to_num(s_vis_nir, copy=False, nan=l1.no_data * scale_factor)
+
+    l1.out_ds["ndwi"][:, :] = ndwi
+    l1.out_ds["ndvi"][:, :] = ndvi
+    l1.out_ds["s_vis_nir"][:, :] = s_vis_nir
+
+    l1.create_var_nc(
+        name="mask_water",
+        type="u1",
+        dims=(
+            "y",
+            "x",
+        ),
+        comp="zlib",
+        complevel=1,
+        scale=1,
+    )
+
+    mask_water_int = np.full(valid_mask.shape, np.nan, dtype=float)
+    mask_water_int[valid_mask] = mask_water[valid_mask].astype(int)
+    np.nan_to_num(mask_water_int, copy=False, nan=l1.no_data)
+    l1.out_ds["mask_water"][:, :] = mask_water_int
+
+    logging.debug("Copying geometry")
+
+    geom = {
+        "sun_azimuth": l1.in_ds.sun_azimuth,
+        "sun_zenith": l1.in_ds.sun_zenith,
+        "view_azimuth": l1.in_ds.view_azimuth,
+        "view_zenith": l1.in_ds.view_zenith,
+        "relative_azimuth": l1.in_ds.relative_azimuth,
+    }
+
+    for var in tqdm(geom, desc="Writing geometry"):
+        l1.create_var_nc(
+            name=var,
+            type="i4",
+            dims=(
+                "y",
+                "x",
+            ),
+            scale=scale_factor,
+        )
+        data = geom[var]
+
+        np.nan_to_num(data, copy=False, nan=l1.no_data * scale_factor)
+
+        l1.out_ds.variables[var][:, :] = data
+
+    l1.out_ds.close()
+
+    shutil.rmtree(output_dir)
+
+    return 0
+
+if __name__ == "__main__":
+    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
+    gain = pd.read_csv(gain_path)
+
+    image_dir = "/D/Data/WISE/"
+
+    images = [
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+    ]
+
+    for image in images:
+        l1c = ReveCube.from_reve_nc(os.path.join(image_dir, image))
+        run_l2r(l1c)

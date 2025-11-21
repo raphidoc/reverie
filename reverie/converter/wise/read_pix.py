@@ -127,13 +127,13 @@ class Pix(ReveCube):
         #     print("Multiple unit found")
 
         # either 'data scale factor' or 'radiance scale factor' can exist in ENVI hdr
-        # self.scale_factor = int(self.Header.metadata['radiance scale factor'])
+        # self.scale = int(self.Header.metadata['radiance scale factor'])
         # scale_res = {key: val for key, val in self.header.items() if re.search(f"scale", key)}
         """
-        scale_factor is used by NetCDF CF in writing and reading
-        Reading: multiply by the scale_factor and add the add_offset
-        Writing: subtract the add_offset and divide by the scale_factor
-        If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
+        scale is used by NetCDF CF in writing and reading
+        Reading: multiply by the scale and add the add_offset
+        Writing: subtract the add_offset and divide by the scale
+        If the scale factor is integer, to properly apply the scale in the writing order we need the
         reciprocal of it.
         """
         scale_factor = [val for key, val in self.header.items() if "scale" in key][0]
@@ -196,7 +196,7 @@ class Pix(ReveCube):
             crs=self.CRS,
         )
 
-        self.expand_coordinate(self.x, self.y, self.CRS)
+        self.expand_coordinate()
 
         self.cal_time(self.center_lon, self.center_lat)
 
@@ -349,14 +349,14 @@ class Pix(ReveCube):
 
         # Create radiometric variable
         self.create_var_nc(
-            var="radiance_at_sensor",
-            datatype="i4",
-            dimensions=(
+            name="radiance_at_sensor",
+            type="i4",
+            dims=(
                 "wavelength",
                 "y",
                 "x",
             ),
-            scale_factor=self.scale_factor,
+            scale=self.scale_factor,
         )
 
         # Add optional bad_band_list to the variable attributes
@@ -372,10 +372,10 @@ class Pix(ReveCube):
 
             # Assign missing value
             """
-            scale_factor is used by NetCDF CF in writing and reading
-            Reading: multiply by the scale_factor and add the add_offset
-            Writing: subtract the add_offset and divide by the scale_factor
-            If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
+            scale is used by NetCDF CF in writing and reading
+            Reading: multiply by the scale and add the add_offset
+            Writing: subtract the add_offset and divide by the scale
+            If the scale factor is integer, to properly apply the scale in the writing order we need the
             reciprocal of it.
             """
             data[data == 0] = self.no_data * self.scale_factor
@@ -395,13 +395,13 @@ class Pix(ReveCube):
 
         for var in tqdm(geom, desc="Writing geometry"):
             self.create_var_nc(
-                var=var,
-                datatype="i4",
-                dimensions=(
+                name=var,
+                type="i4",
+                dims=(
                     "y",
                     "x",
                 ),
-                scale_factor=self.scale_factor,
+                scale=self.scale_factor,
             )
             data = geom[var]
 
@@ -598,7 +598,7 @@ class Pix(ReveCube):
             "scale_factor_at_central_meridian"
         ]
 
-        # self.no_data = netCDF4.default_fillvals[datatype]
+        # self.no_data = netCDF4.default_fillvals[type]
         # When scaling the default _FillValue, get somehow messed up when reading with GDAL
         self.no_data = math.trunc(netCDF4.default_fillvals["i4"] / 1000)
 
@@ -614,7 +614,7 @@ class Pix(ReveCube):
 
         # Create radiometric variable
         # chunk size is set to 1 wavelength to allow for parallel computation and I/O
-        # size along the spatial dimensions should be optimized for the available memory
+        # size along the spatial dims should be optimized for the available memory
         radiance_at_sensor = root_grp.create(
             "radiance_at_sensor",
             shape=(self.n_bands, self.n_rows, self.n_cols),

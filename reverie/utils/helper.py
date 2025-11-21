@@ -11,14 +11,30 @@ import math
 from charset_normalizer import from_path
 import re
 import xarray as xr
+import psutil
 
 BADVALUE = -999
 
-def mask_wavelength(wavelength, by):
-    wavelength_mask = (wavelength > min(by)) & (wavelength < max(by))
-    wavelength = wavelength[wavelength_mask]
 
-    return wavelength
+def get_available_ram_gb():
+    mem = psutil.virtual_memory()
+    available_gb = mem.available / (1024 ** 3)
+    return available_gb
+
+
+def estimate_window_size(l1, wavelength, ram_gb, n_variables=6, dtype=np.float32):
+    # Get dataset dims
+    # n_wl = len(l1.in_ds.wavelength)
+    n_wl = wavelength.size
+    # n_y = len(l1.in_ds.y)
+    # n_x = len(l1.in_ds.x)
+    # Data type size in bytes
+    dtype_size = np.dtype(dtype).itemsize
+    ram_bytes = ram_gb * (1024 ** 3)
+    max_pixels = ram_bytes // dtype_size
+    max_yx = max_pixels // (n_wl * n_variables)
+    window_size = int(np.sqrt(max_yx))
+    return window_size
 
 def get_f0(doy : int, wavelength):
 

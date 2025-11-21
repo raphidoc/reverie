@@ -2,11 +2,11 @@ from reverie import ReveCube
 from reverie.converter import wise
 
 if __name__ == "__main__":
-    # l1 = wise.read_pix.Pix(
+    # image = wise.read_pix.Pix(
     #     pix_dir="/D/Data/TEST/TEST_WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.dpix",
     # )
     #
-    # l1.to_reve_nc("/D/Data/TEST/TEST_WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc")
+    # image.to_reve_nc("/D/Data/TEST/TEST_WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc")
 
     reve = ReveCube.from_zarr(
         "/D/Data/TEST/TEST_WISE/MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.zarr"

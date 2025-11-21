@@ -199,6 +199,8 @@ class ReveCube(ABC):
         # Dataset accessor
         self.in_path = in_path
         self.in_ds = in_ds
+        self.out_path = None
+        self.out_ds = None
 
         self.image_name = image_name
 
@@ -224,8 +226,6 @@ class ReveCube(ABC):
         self.sensor = {}
 
         # Optional attributes
-        self.out_file = None
-        self.out_ds = None
 
         self.no_data = None
         self.valid_mask = None
@@ -422,60 +422,6 @@ class ReveCube(ABC):
                     self.valid_mask = data.isel(wavelength=60).notnull().data
                     break
 
-    def get_water_mask(self,  window: Window = None):
-        """
-        Get the water mask for the enire image or a specific tile
-        :param window: an object of class Window
-        :return:[]
-        """
-        # logging.debug("geting valid mask")
-        if self.water_mask is None:
-            self.cal_water_mask()
-        if window is None:
-            return self.water_mask
-        else:
-            y_start = int(window.row_off)
-            y_stop = y_start + int(window.height)
-            x_start = int(window.col_off)
-            x_stop = x_start + int(window.width)
-            #return self.valid_mask[tile.sline : tile.eline, tile.spixl : tile.epixl]
-            return self.water_mask[y_start : y_stop, x_start : x_stop]
-
-    def cal_water_mask(self):
-        """
-        Calculate the mask of water pixel for the entire image (NDWI > 0)
-        :return: valid_mask
-        """
-        logging.debug("calculating valid mask")
-        if self.water_mask is None:
-
-            blue_i = np.abs(self.in_ds.wavelength.values - 490).argmin()
-            green_i = np.abs(self.in_ds.wavelength.values - 560).argmin()
-            nir_i = np.abs(self.in_ds.wavelength.values - 1000).argmin()
-
-            blue = self.in_ds.radiance_at_sensor.isel(wavelength=blue_i)
-            green = self.in_ds.radiance_at_sensor.isel(wavelength=green_i)
-            nir = self.in_ds.radiance_at_sensor.isel(wavelength=nir_i)
-
-            self.ndwi = (green - nir) / (green + nir)
-
-            s_vis_nir = nir / (blue + green)
-
-            ### DEV
-
-            import matplotlib.pyplot as plt
-
-            plt.imshow(s_vis_nir, cmap='viridis')  # 'viridis' is a good default colormap
-            plt.colorbar(label='Slope Intensity')
-            plt.title('NDWI Matrix')
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.show()
-
-            ### DEV
-
-            self.water_mask = None
-
     def filter_bad_band(self):
         # filter image for bad bands
         bad_band_list = self.in_ds["radiance_at_sensor"].bad_band_list
@@ -485,7 +431,15 @@ class ReveCube(ABC):
         bad_band_list = np.array(bad_band_list)
         good_band_indices = np.where(bad_band_list == "1")[0]
         good_bands_slice = slice(min(good_band_indices), max(good_band_indices) + 1)
+
+        self.wavelength = self.wavelength[good_band_indices]
         self.in_ds = self.in_ds.isel(wavelength=good_bands_slice)
+
+    def mask_wavelength(self, wavelength):
+        wavelength_mask = (self.wavelength >= min(wavelength)) & (self.wavelength <= max(wavelength))
+
+        self.wavelength = self.wavelength[wavelength_mask]
+        self.in_ds = self.in_ds.sel(wavelength=self.wavelength)
 
 
     def read_band(self, bandindex, tile: Tile = None):
@@ -519,7 +473,33 @@ class ReveCube(ABC):
     def cal_view_geom(self):
         pass
 
-    def create_reve_nc(self, out_file: str = None):
+    def update_attributes(self):
+        self.wavelength = self.in_ds.wavelength.values
+        self.y = self.in_ds.y
+        self.x = self.in_ds.x
+        self.n_rows = len(self.y)
+        self.n_cols = len(self.x)
+        # New affine origin
+        a, b, c, d, e, f, g, h, i = self.Affine
+        # New origin (top-left corner)
+        c = self.x[0].values
+        f = self.y[0].values
+        self.Affine = affine.Affine(a, b, c, d, e, f)
+
+    def create_windows(self, window_size: int) -> list[Window]:
+        n_y = len(self.y)
+        n_x = len(self.x)
+        windows = []
+        for y_start in range(0, n_y, window_size):
+            y_end = min(y_start + window_size, n_y)
+            height = y_end - y_start
+            for x_start in range(0, n_x, window_size):
+                x_end = min(x_start + window_size, n_x)
+                width = x_end - x_start
+                windows.append(Window(x_start, y_start, width, height))
+        return windows
+
+    def create_reve_nc(self, out_path: str = None):
         """Create CF-1.0 compliant NetCDF dataset from DateCube
         CF-1.0 (http://cfconventions.org/Data/cf-conventions/cf-conventions-1.0/build/cf-conventions.html#dimensions)
          is chosen to ensure compatibility with the GDAL NetCDF driver:
@@ -531,14 +511,16 @@ class ReveCube(ABC):
         :return: None
         """
 
-        if out_file is None:
-            raise Exception("out_file file not set, cannot create dataset")
+        if out_path is None:
+            raise Exception("out_path file not set, cannot create dataset")
 
         try:
-            nc_ds = netCDF4.Dataset(out_file, "w", format="NETCDF4")
+            nc_ds = netCDF4.Dataset(out_path, "w", format="NETCDF4")
         except Exception as e:
             print(e)
             return
+
+        self.out_path = out_path
 
         # TODO validate that it follow the convention with cfdm / cf-python.
         #  For compatibility with GDAL NetCDF driver use CF-1.0
@@ -679,26 +661,26 @@ class ReveCube(ABC):
 
     def create_var_nc(
         self,
-        var: str = None,
-        datatype=None,
-        dimensions: tuple = None,
-        scale_factor: float = 1.0,
-        compression="zlib",
+        name: str = None,
+        type=None,
+        dims: tuple = None,
+        scale: float = 1.0,
+        comp="zlib",
         complevel=1,
     ):
         """Create a CF-1.0 variable in a NetCDF dataset
 
         Parameters
         ----------
-        var : str
+        name : str
             Name of the variable to write to the NetCDF dataset
-        datatype : str
+        type : str
             Data type of the variable to write to the NetCDF dataset
-        dimensions : tuple
+        dims : tuple
             Contain the dimension of the var with the form ('wavelength', 'y', 'x',).
-        scale_factor : float
+        scale : float
             scale_factor is used by NetCDF CF in writing and reading for lossy compression.
-        compression : str, default: 'zlib'
+        comp : str, default: 'zlib'
             Name of the compression algorithm to use. Use None to deactivate compression.
         complevel : int, default: 1
             Compression level.
@@ -715,26 +697,32 @@ class ReveCube(ABC):
 
         # Easier to leave missing_value as the default _FillValue,
         # but then GDAL doesn't recognize it ...
-        # self.no_data = netCDF4.default_fillvals[datatype]
+        # self.no_data = netCDF4.default_fillvals[type]
         # When scaling the default _FillValue, it get somehow messed up when reading with GDAL
-        self.no_data = math.trunc(netCDF4.default_fillvals[datatype] * 0.00001)
+
+        # Offset no_data to fit inside data type after scaling
+        # self.no_data = math.trunc(netCDF4.default_fillvals[type] * 0.00001)
+        self.no_data = math.trunc(netCDF4.default_fillvals[type] * scale)
+
+        # if scale == 1.0:
+        #     self.no_data = netCDF4.default_fillvals[type] - 50
 
         data_var = ds.createVariable(
-            varname=var,
-            datatype=datatype,
-            dimensions=dimensions,
+            varname=name,
+            datatype=type,
+            dimensions=dims,
             fill_value=self.no_data,
-            compression=compression,
+            compression=comp,
             complevel=complevel,
         )
 
         data_var.grid_mapping = "grid_mapping"  # self.proj_var.name
 
         # Follow the standard name table CF convention
-        # TODO: fill the units and standard name automatically from var ?
+        # TODO: fill the units and standard name automatically from name ?
         #  Water leaving reflectance could be: reflectance_of_water_leaving_radiance_on_incident_irradiance
         #  "reﬂectance based on the water-leaving radiance and the incident irradiance" (Ocean Optics Web Book)
-        std_name, std_unit = get_cf_std_name(alias=var)
+        std_name, std_unit = get_cf_std_name(alias=name)
 
         data_var.units = std_unit
         data_var.standard_name = std_name
@@ -745,13 +733,13 @@ class ReveCube(ABC):
         data_var.missing_value = self.no_data
 
         """
-        scale_factor is used by NetCDF CF in writing and reading
-        Reading: multiply by the scale_factor and add the add_offset
-        Writing: subtract the add_offset and divide by the scale_factor
-        If the scale factor is integer, to properly apply the scale_factor in the writing order we need the
+        scale is used by NetCDF CF in writing and reading
+        Reading: multiply by the scale and add the add_offset
+        Writing: subtract the add_offset and divide by the scale
+        If the scale factor is integer, to properly apply the scale in the writing order we need the
         reciprocal of it.
         """
-        data_var.scale_factor = scale_factor
+        data_var.scale_factor = scale
         data_var.add_offset = 0
 
     def to_reve_nc(self):
@@ -764,7 +752,7 @@ class ReveCube(ABC):
 
     def to_zarr(self, out_store: str = None):
         if out_store is None:
-            raise Exception("out_file file not set, cannot create dataset")
+            raise Exception("out_path file not set, cannot create dataset")
 
         try:
             store = zarr.DirectoryStore("data/example.zarr")
@@ -952,13 +940,13 @@ class ReveCube(ABC):
             # print("UTM20N y = " + str(y))
 
             # Point geometry (same CRS as raster)
-            point_geom = gpd.GeoDataFrame(
-                {'uuid': [uuid]},
-                geometry=[Point(data_sel.x[half_window], data_sel.y[half_window])],
-                crs=self.CRS.to_epsg()
-            )
-
-            point_geom.to_file(os.path.join(output_box, f"{uuid}_point.geojson"), driver="GeoJSON")
+            # point_geom = gpd.GeoDataFrame(
+            #     {'uuid': [uuid]},
+            #     geometry=[Point(data_sel.x[half_window], data_sel.y[half_window])],
+            #     crs=self.CRS.to_epsg()
+            # )
+            #
+            # point_geom.to_file(os.path.join(output_box, f"{uuid}_point.geojson"), driver="GeoJSON")
 
             # Window bounds
             win = Window.from_slices(
@@ -1056,7 +1044,7 @@ class ReveCube(ABC):
     def extract_pixel_line(self, line_index: int, line_window: int):
         xr_ds = self.in_ds
 
-        # Stack the 'y' and 'x' dimensions into a single dimension 'yx'
+        # Stack the 'y' and 'x' dims into a single dimension 'yx'
         stacked_ds = xr_ds.stack(yx=("y", "x"))
 
         # Assign 'LineIndex' as a coordinate to the stacked Dataset
@@ -1085,46 +1073,46 @@ class ReveCube(ABC):
 
         return extracted_line
 
-    def output_rgb(self):
-        xr_ds = self.in_ds
-
-        import matplotlib.pyplot as plt
-        from skimage import exposure
-
-        def adjust_gamma(img):
-            corrected = exposure.adjust_gamma(img, 1)
-            return corrected
-
-        def find_nearest(array, value):
-            array = np.asarray(array)
-            idx = (np.abs(array - value)).argmin()
-            return idx
-
-        560 - xr_ds["radiance_at_sensor"].coords["wavelength"]
-
-        find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
-
-        red_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
-        green_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 550)
-        blue_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 450)
-
-        red_array = xr_ds.isel(wavelength=red_band)["radiance_at_sensor"]
-        green_array = xr_ds.isel(wavelength=green_band)["radiance_at_sensor"]
-        blue_array = xr_ds.isel(wavelength=blue_band)["radiance_at_sensor"]
-
-        y_ticks, x_ticks = list(range(0, self.n_rows, 1000)), list(
-            range(0, self.n_cols, 1000)
-        )
-        cor_x, cor_y = helper.transform_xy(self.Affine, rows=y_ticks, cols=x_ticks)
-
-        rgb_data = np.zeros((red_array.shape[0], red_array.shape[1], 3), dtype=float)
-        rgb_data[:, :, 0] = red_array
-        rgb_data[:, :, 1] = green_array
-        rgb_data[:, :, 2] = blue_array
-        dst = adjust_gamma(rgb_data)
-        dst[~self.get_valid_mask()] = 1.0
-        # dst = rgb_data
-        plt.imshow(dst)
-        plt.xticks(ticks=x_ticks, labels=cor_x)
-        plt.yticks(ticks=y_ticks, labels=cor_y, rotation=90)
-        plt.show()
+    # def output_rgb(self):
+    #     xr_ds = self.in_ds
+    #
+    #     import matplotlib.pyplot as plt
+    #     from skimage import exposure
+    #
+    #     def adjust_gamma(img):
+    #         corrected = exposure.adjust_gamma(img, 1)
+    #         return corrected
+    #
+    #     def find_nearest(array, value):
+    #         array = np.asarray(array)
+    #         idx = (np.abs(array - value)).argmin()
+    #         return idx
+    #
+    #     560 - xr_ds["radiance_at_sensor"].coords["wavelength"]
+    #
+    #     find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
+    #
+    #     red_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 650)
+    #     green_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 550)
+    #     blue_band = find_nearest(xr_ds["radiance_at_sensor"].coords["wavelength"], 450)
+    #
+    #     red_array = xr_ds.isel(wavelength=red_band)["radiance_at_sensor"]
+    #     green_array = xr_ds.isel(wavelength=green_band)["radiance_at_sensor"]
+    #     blue_array = xr_ds.isel(wavelength=blue_band)["radiance_at_sensor"]
+    #
+    #     y_ticks, x_ticks = list(range(0, self.n_rows, 1000)), list(
+    #         range(0, self.n_cols, 1000)
+    #     )
+    #     cor_x, cor_y = helper.transform_xy(self.Affine, rows=y_ticks, cols=x_ticks)
+    #
+    #     rgb_data = np.zeros((red_array.shape[0], red_array.shape[1], 3), dtype=float)
+    #     rgb_data[:, :, 0] = red_array
+    #     rgb_data[:, :, 1] = green_array
+    #     rgb_data[:, :, 2] = blue_array
+    #     dst = adjust_gamma(rgb_data)
+    #     dst[~self.get_valid_mask()] = 1.0
+    #     # dst = rgb_data
+    #     plt.imshow(dst)
+    #     plt.xticks(ticks=x_ticks, labels=cor_x)
+    #     plt.yticks(ticks=y_ticks, labels=cor_y, rotation=90)
+    #     plt.show()

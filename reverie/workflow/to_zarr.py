@@ -25,6 +25,6 @@ if __name__ == "__main__":
         "/D/Data/TEST/TEST_WISE/MC-51A/190818_MC-51A-WI-2x1x1_v02-L1C.zarr"
     )
 
-    # l1 = xr.open_zarr(
+    # image = xr.open_zarr(
     #     "/D/Data/TEST/TEST_WISE/MC-12A/190820_MC-12A-WI-1x1x1_v02-L1C.zarr"
     # )

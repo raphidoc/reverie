@@ -126,7 +126,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
     # Convert F0 from W m-2 nm-1 to uW cm-2 nm-1
     temp = f0_wise * 1e2
 
-    # Add two new dimensions to temp (at the end)
+    # Add two new dims to temp (at the end)
     F0_3d = temp[:, np.newaxis, np.newaxis]
 
     # find the window on which we do the cal/val
@@ -172,7 +172,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         x = image_sub.x.values
         y = image_sub.y.values
 
-        # Repeat temp along the new dimensions
+        # Repeat temp along the new dims
         F0_image = np.repeat(F0_3d, len(y), axis=1)
         F0_image = np.repeat(F0_image, len(x), axis=2)
 
@@ -377,37 +377,37 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         # ):
         #     xi = np.hstack(
         #         [
-        #             image_sub.variables["sun_zenith"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["sun_zenith"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
-        #             image_sub.variables["view_zenith"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["view_zenith"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
-        #             image_sub.variables["relative_azimuth"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["relative_azimuth"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables[
+        #                 image.variables[
         #                     "atmosphere_mass_content_of_water_vapor"
         #                 ].values,
         #                 n_pixels,
         #             ).reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables[
+        #                 image.variables[
         #                     "equivalent_thickness_at_stp_of_atmosphere_ozone_content"
         #                 ].values,
         #                 n_pixels,
         #             ).reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables[
+        #                 image.variables[
         #                     "aerosol_optical_thickness_at_555_nm"
         #                 ].values,
         #                 n_pixels,
         #             ).reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables["surface_air_pressure"].values, n_pixels
+        #                 image.variables["surface_air_pressure"].values, n_pixels
         #             ).reshape(-1, 1),
-        #             np.repeat((-image_sub.z.values / 1000), n_pixels).reshape(-1, 1),
+        #             np.repeat((-image.z.values / 1000), n_pixels).reshape(-1, 1),
         #             np.repeat(band * 1e-3, n_pixels).reshape(-1, 1),
         #         ]
         #     )
@@ -419,7 +419,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         xi=xi,
         #     )
         #
-        #     pr[l1.get_valid_mask(tile=tile)] = pr_values
+        #     pr[image.get_valid_mask(tile=tile)] = pr_values
         #
         #     up_trans["atmospheric_reflectance_at_sensor"][index, :, :] = pr
         #
@@ -431,7 +431,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         xi=xi,
         #     )
         #
-        #     gt[l1.get_valid_mask(tile=tile)] = gt_values
+        #     gt[image.get_valid_mask(tile=tile)] = gt_values
         #
         #     up_trans["gas_trans_up"][index, :, :] = gt
         #
@@ -443,7 +443,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         xi=xi,
         #     )
         #
-        #     rt[l1.get_valid_mask(tile=tile)] = rt_values
+        #     rt[image.get_valid_mask(tile=tile)] = rt_values
         #
         #     up_trans["rayleigh_trans_up"][index, :, :] = rt
         #
@@ -455,7 +455,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         xi=xi,
         #     )
         #
-        #     at[l1.get_valid_mask(tile=tile)] = rt_values
+        #     at[image.get_valid_mask(tile=tile)] = rt_values
         #
         #     up_trans["aerosol_trans_up"][index, :, :] = at
         #
@@ -467,7 +467,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         xi=xi,
         #     )
         #
-        #     sa[l1.get_valid_mask(tile=tile)] = sa_values
+        #     sa[image.get_valid_mask(tile=tile)] = sa_values
         #
         #     up_trans["spherical_albedo"][index, :, :] = sa
 
@@ -484,26 +484,26 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         )
 
         sky = rho_z17["sky"]
-        # Add two new dimensions to temp
+        # Add two new dims to temp
         sky_3d = sky[:, np.newaxis, np.newaxis]
 
-        # Repeat temp along the new dimensions
+        # Repeat temp along the new dims
         sky_3d = np.repeat(sky_3d, len(y), axis=1)
         sky_3d = np.repeat(sky_3d, len(x), axis=2)
 
         sun = rho_z17["sun"]
-        # Add two new dimensions to temp
+        # Add two new dims to temp
         sun_3d = sun[:, np.newaxis, np.newaxis]
 
-        # Repeat temp along the new dimensions
+        # Repeat temp along the new dims
         sun_3d = np.repeat(sun_3d, len(y), axis=1)
         sun_3d = np.repeat(sun_3d, len(x), axis=2)
 
         rho = rho_z17["rho"]
-        # Add two new dimensions to temp
+        # Add two new dims to temp
         rho_3d = rho[:, np.newaxis, np.newaxis]
 
-        # Repeat temp along the new dimensions
+        # Repeat temp along the new dims
         rho_3d = np.repeat(rho_3d, len(y), axis=1)
         rho_3d = np.repeat(rho_3d, len(x), axis=2)
 
@@ -551,27 +551,27 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #
         # # Compute sea surface reflection from the ACOLITE Lut (OSOAA model)
         #
-        # sr = np.full(l1.get_valid_mask(tile=tile).shape, np.nan, float)
+        # sr = np.full(image.get_valid_mask(tile=tile).shape, np.nan, float)
         #
         # for index, band in enumerate(wavelength):
         #     xi = np.hstack(
         #         [
         #             np.repeat(band * 1e-3, n_pixels).reshape(-1, 1),
-        #             image_sub.variables["relative_azimuth"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["relative_azimuth"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
-        #             image_sub.variables["view_zenith"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["view_zenith"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
-        #             image_sub.variables["sun_zenith"]
-        #             .values[l1.get_valid_mask(tile=tile)]
+        #             image.variables["sun_zenith"]
+        #             .values[image.get_valid_mask(tile=tile)]
         #             .reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables["wind_speed"].values,
+        #                 image.variables["wind_speed"].values,
         #                 n_pixels,
         #             ).reshape(-1, 1),
         #             np.repeat(
-        #                 image_sub.variables[
+        #                 image.variables[
         #                     "aerosol_optical_thickness_at_555_nm"
         #                 ].values,
         #                 n_pixels,
@@ -593,7 +593,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         #         method="cubic"
         #     )
         #
-        #     sr[l1.get_valid_mask(tile=tile)] = sea_rho
+        #     sr[image.get_valid_mask(tile=tile)] = sea_rho
         #
         #     rho_sky["rho_sky"][index, :, :] = sr
 
@@ -612,10 +612,10 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
 
         temp = np.interp(x=wavelength, xp=gain_wavelength, fp=gain_values)
 
-        # Add two new dimensions to temp (at the end)
+        # Add two new dims to temp (at the end)
         temp_3d = temp[:, np.newaxis, np.newaxis]
 
-        # Repeat temp along the new dimensions
+        # Repeat temp along the new dims
         temp_3d = np.repeat(temp_3d, len(y), axis=1)
         temp_3d = np.repeat(temp_3d, len(x), axis=2)
 
@@ -655,9 +655,7 @@ def run_ac_point(l1: ReveCube, in_situ, window_size, gain):
         # rho_t_cal.mean(["x", "y"]).plot()
         # plt.show()
 
-        rho_s_cal = (rho_t_cal - rho_path) / (
-            total_trans + spherical_albedo * (rho_t_cal - rho_path)
-        )
+        rho_s_cal = (rho_t_cal - rho_path) / (total_trans + spherical_albedo * (rho_t_cal - rho_path))
         # rho_s_cal.mean(["x", "y"]).plot()
         # plt.show()
 

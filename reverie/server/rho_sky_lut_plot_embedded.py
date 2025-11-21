@@ -109,18 +109,18 @@ callback = CustomJS(
         aot=aot,
     ),
     code="""
-    var data = source.data;
-    var relative_azimuth = relative_azimuth.indexOf(parseFloat(azi_select.value));
-    var view_zenith = view_zenith.indexOf(parseFloat(thv_select.value));
-    var sun_zenith = sun_zenith.indexOf(parseFloat(ths_select.value));
-    var wind_speed = wind_speed.indexOf(parseFloat(wind_select.value));
-    var aot = aot.indexOf(parseFloat(tau_select.value));
+    name data = source.data;
+    name relative_azimuth = relative_azimuth.indexOf(parseFloat(azi_select.value));
+    name view_zenith = view_zenith.indexOf(parseFloat(thv_select.value));
+    name sun_zenith = sun_zenith.indexOf(parseFloat(ths_select.value));
+    name wind_speed = wind_speed.indexOf(parseFloat(wind_select.value));
+    name aot = aot.indexOf(parseFloat(tau_select.value));
 
     console.log('LUT is array: ', Array.isArray(data['lookup_table']));
     console.log('lookup_table shape:', data['lookup_table'].length, data['lookup_table'][0].length);
 
     function getShape(arr) {
-        var shape = [];
+        name shape = [];
         while(Array.isArray(arr)) {
             shape.push(arr.length);
             arr = arr[0];
@@ -136,11 +136,11 @@ callback = CustomJS(
         // Handle the case where the selected value is not found in the array
         console.error('Selected value not found in array');
     } else {
-        var new_y = [];
-        var wavelengths = data['lookup_table'].length;
+        name new_y = [];
+        name wavelengths = data['lookup_table'].length;
 
-        for (var i = 0; i < wavelengths; i++) {
-            var value = data['lookup_table'][i][relative_azimuth][view_zenith][sun_zenith][wind_speed][aot];
+        for (name i = 0; i < wavelengths; i++) {
+            name value = data['lookup_table'][i][relative_azimuth][view_zenith][sun_zenith][wind_speed][aot];
             new_y.push(value);
         }
 
@@ -211,18 +211,18 @@ inputs = column(azi_select, thv_select, ths_select, wind_select, tau_select)
 #         aot=aot,
 #     ),
 #     code="""
-#     var data = source.data;
-#     var relative_azimuth = relative_azimuth.indexOf(parseFloat(azi_select.value));
-#     var view_zenith = view_zenith.indexOf(parseFloat(thv_select.value));
-#     var sun_zenith = sun_zenith.indexOf(parseFloat(ths_select.value));
-#     var wind_speed = wind_speed.indexOf(parseFloat(wind_select.value));
-#     var aot = aot.indexOf(parseFloat(tau_select.value));
+#     name data = source.data;
+#     name relative_azimuth = relative_azimuth.indexOf(parseFloat(azi_select.value));
+#     name view_zenith = view_zenith.indexOf(parseFloat(thv_select.value));
+#     name sun_zenith = sun_zenith.indexOf(parseFloat(ths_select.value));
+#     name wind_speed = wind_speed.indexOf(parseFloat(wind_select.value));
+#     name aot = aot.indexOf(parseFloat(tau_select.value));
 #
 #     console.log('LUT is array: ', Array.isArray(data['lookup_table']));
 #     console.log('lookup_table shape:', data['lookup_table'].length, data['lookup_table'][0].length);
 #
 #     function getShape(arr) {
-#         var shape = [];
+#         name shape = [];
 #         while(Array.isArray(arr)) {
 #             shape.push(arr.length);
 #             arr = arr[0];
@@ -238,11 +238,11 @@ inputs = column(azi_select, thv_select, ths_select, wind_select, tau_select)
 #         // Handle the case where the selected value is not found in the array
 #         console.error('Selected value not found in array');
 #     } else {
-#         var new_y = [];
-#         var wavelengths = data['lookup_table'].length;
+#         name new_y = [];
+#         name wavelengths = data['lookup_table'].length;
 #
-#         for (var i = 0; i < wavelengths; i++) {
-#             var value = data['lookup_table'][i][relative_azimuth][view_zenith][sun_zenith][wind_speed][aot];
+#         for (name i = 0; i < wavelengths; i++) {
+#             name value = data['lookup_table'][i][relative_azimuth][view_zenith][sun_zenith][wind_speed][aot];
 #             new_y.push(value);
 #         }
 #

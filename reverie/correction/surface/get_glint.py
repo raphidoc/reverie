@@ -4,13 +4,18 @@ import xarray as xr
 from reverie.correction.surface import z17
 
 
-def get_rho_surface(image_sub, wavelength):
+def get_glint_z17(image_sub, wavelength, aod555):
 
     x = image_sub.x.values
     y = image_sub.y.values
 
+    if aod555 is not None:
+        aod555_xi = aod555
+    else:
+        aod555_xi = float(image_sub.variables["aerosol_optical_thickness_at_555_nm"].mean().values)
+
     rho_z17 = z17.get_sky_sun_rho(
-        aot_550=float(image_sub.variables["aerosol_optical_thickness_at_555_nm"].mean().values),
+        aot_550=aod555_xi,
         sun_zen=float(image_sub.variables["sun_zenith"].mean().values),
         view_ang=[float(image_sub.variables["view_zenith"].mean().values),
                   float(image_sub.variables["relative_azimuth"].mean().values)],

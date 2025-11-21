@@ -89,8 +89,8 @@ if __name__ == "__main__":
     #     # 3.750,
     # ]
 
-    # Define your dimensions here
-    # dimensions = [
+    # Define your dims here
+    # dims = [
     #     np.arange(10, 61, 10).tolist(),  # sun zenith
     #     np.arange(0, 31, 10).tolist(),  # view zenith
     #     np.arange(0, 181, 10).tolist(),  # relative azimuth

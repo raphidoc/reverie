@@ -13,12 +13,14 @@ from reverie.ancillary import obpg
 
 def add_ancillary(l1: ReveCube):
 
+    l1.out_ds = nc.Dataset(l1.out_path, "a", format="NETCDF4")
+
     # test if ancillary data is already present
     required_anc = ["wind_speed", "wind_direction", "surface_air_pressure",
                      "atmosphere_mass_content_of_water_vapor",
                      "equivalent_thickness_at_stp_of_atmosphere_ozone_content",
                      "aerosol_optical_thickness_at_555_nm"]
-    existing_anc = set(l1.in_ds.variables.keys())
+    existing_anc = set(l1.out_ds.variables.keys())
     if all(var in existing_anc for var in required_anc):
         logging.info("Ancillary data already present.")
         return
@@ -50,19 +52,15 @@ def add_ancillary(l1: ReveCube):
 
     # Open the dataset with netcdf4 and write the ancilliary variable
 
-    l1.in_ds.close()
-
-    l1.in_ds = nc.Dataset(l1.in_path, "a", format="NETCDF4")
-
-    wind_speed = l1.in_ds.createVariable("wind_speed", "f4")
+    wind_speed = l1.out_ds.createVariable("wind_speed", "f4")
     wind_speed.standard_name = "wind_speed"
     wind_speed.units = "m s-1"
     wind_speed.long_name = "Wind speed at 10m"
     wind_speed.description = "GMAO MERRA-2"
     wind_speed[:] = math.sqrt(anc.variables["U10M"] ** 2 + anc.variables["V10M"] ** 2)
-    # l1.in_ds["wind_speed"][:] = math.sqrt(anc.variables["U10M"] ** 2 + anc.variables["V10M"] ** 2)
+    # image.in_ds["wind_speed"][:] = math.sqrt(anc.variables["U10M"] ** 2 + anc.variables["V10M"] ** 2)
 
-    wind_direction = l1.in_ds.createVariable("wind_direction", "f4")
+    wind_direction = l1.out_ds.createVariable("wind_direction", "f4")
     wind_direction.standard_name = "wind_direction"
     wind_direction.units = "degrees"
     wind_direction.long_name = "Wind direction at 10m"
@@ -70,19 +68,19 @@ def add_ancillary(l1: ReveCube):
     wind_direction[:] = (
         math.atan2(anc.variables["U10M"], anc.variables["V10M"]) * 180 / math.pi
     )
-    # l1.in_ds["wind_direction"][:] = (
+    # image.in_ds["wind_direction"][:] = (
     #         math.atan2(anc.variables["U10M"], anc.variables["V10M"]) * 180 / math.pi
     #     )
 
-    surface_air_pressure = l1.in_ds.createVariable("surface_air_pressure", "f4")
+    surface_air_pressure = l1.out_ds.createVariable("surface_air_pressure", "f4")
     surface_air_pressure.standard_name = "surface_air_pressure"
     surface_air_pressure.units = "mb"
     surface_air_pressure.long_name = "Surface air pressure"
     surface_air_pressure.description = "GMAO MERRA-2"
     surface_air_pressure[:] = anc.variables["PS"] / 100  # convert [Pa] to [mb]
-    # l1.in_ds["surface_air_pressure"][:] = anc.variables["PS"] / 100
+    # image.in_ds["surface_air_pressure"][:] = anc.variables["PS"] / 100
 
-    water_vapor = l1.in_ds.createVariable(
+    water_vapor = l1.out_ds.createVariable(
         "atmosphere_mass_content_of_water_vapor", "f4"
     )
     water_vapor.standard_name = "atmosphere_mass_content_of_water_vapor"
@@ -90,9 +88,9 @@ def add_ancillary(l1: ReveCube):
     water_vapor.long_name = "Atmosphere mass content of water vapor"
     water_vapor.description = "GMAO MERRA-2"
     water_vapor[:] = anc.variables["TQV"] / 10  # convert [kg m-2] to [g cm-2]
-    # l1.in_ds["atmosphere_mass_content_of_water_vapor"][:] = anc.variables["TQV"] / 10
+    # image.in_ds["atmosphere_mass_content_of_water_vapor"][:] = anc.variables["TQV"] / 10
 
-    ozone = l1.in_ds.createVariable(
+    ozone = l1.out_ds.createVariable(
         "equivalent_thickness_at_stp_of_atmosphere_ozone_content", "f4"
     )
     ozone.standard_name = "equivalent_thickness_at_stp_of_atmosphere_ozone_content"
@@ -100,19 +98,19 @@ def add_ancillary(l1: ReveCube):
     ozone.long_name = "Equivalent thickness at STP of atmosphere ozone content"
     ozone.description = "GMAO MERRA-2"
     ozone[:] = anc.variables["TO3"] / 1000  # convert [Dobson] to [cm-atm]
-    # l1.in_ds["equivalent_thickness_at_stp_of_atmosphere_ozone_content"][:] = anc.variables["TO3"] / 1000
+    # image.in_ds["equivalent_thickness_at_stp_of_atmosphere_ozone_content"][:] = anc.variables["TO3"] / 1000
 
-    aot = l1.in_ds.createVariable("aerosol_optical_thickness_at_555_nm", "f4")
+    aot = l1.out_ds.createVariable("aerosol_optical_thickness_at_555_nm", "f4")
     aot.standard_name = "aerosol_optical_thickness_at_555_nm"
     aot.units = "1"
     aot.long_name = "aerosol_optical_thickness_at_555_nm"
     aot.description = "GMAO MERRA-2 TOTEXTTAU"
     aot[:] = anc.variables["TOTEXTTAU"]
-    # l1.in_ds["aerosol_optical_thickness_at_555_nm"][:] = anc.variables["TOTEXTTAU"]
+    # image.in_ds["aerosol_optical_thickness_at_555_nm"][:] = anc.variables["TOTEXTTAU"]
 
     l1.in_ds.close()
 
-    # test = l1.in_ds.assign(
+    # test = image.in_ds.assign(
     #     {
     #         "wind_speed": math.sqrt(anc.variables["U10M"] ** 2 + anc.variables["V10M"] ** 2),  # in [m s-1]
     #         "wind_direction": math.atan2(anc.variables["U10M"], anc.variables["V10M"]) * 180 / math.pi,
@@ -130,7 +128,8 @@ if __name__ == "__main__":
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-L1CG.nc"
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc"
         # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
         # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
         # "MC-10A/190820_MC-10A-WI-1x1x1_v02-L1G.nc",

@@ -37,7 +37,7 @@ def create_ir_output_nc(filename, coords, compression=None, complevel=None):
         "w",
         format="NETCDF4",
     )
-    # Create the dimensions
+    # Create the dims
 
     nc.createDimension("sol_zen", len(coords["sol_zen"]))
     nc.createDimension("water", len(coords["water"]))
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     # TODO, run only for the 20 node wavelength of 6S
     #  they use liner interpolation for the rest of the spectrun anyway
-    # Define your dimensions here
+    # Define your dims here
     dimensions = [
         np.arange(0, 81, 1).tolist(),  # sun zenith
         [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],  # H2O g/cm2
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     nc = create_ir_output_nc(os.path.join(output_dir, "lut_ir.nc"), coords)
 
-    # Get the shape of the dimensions
+    # Get the shape of the dims
     shape = [len(dimension) for dimension in dimensions]
 
     i_direct_reshaped = np.reshape(i_direct, shape)

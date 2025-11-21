@@ -90,7 +90,7 @@ def httpdl(
 def uncompressFile(compressed_file):
     """
     uncompress file
-    compression methods:
+    comp methods:
         bzip2
         gzip
         UNIX compress
