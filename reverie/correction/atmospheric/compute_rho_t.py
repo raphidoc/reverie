@@ -159,11 +159,11 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
-        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
     ]
 
     lut_aer = lut.load_aer()

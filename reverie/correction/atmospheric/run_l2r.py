@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import shutil
+import time
 
 from scipy import stats
 import xarray as xr
@@ -124,6 +125,28 @@ def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_in
 
 def run_l2r(l1, gain = None):
 
+    log_dir = os.path.dirname(l1.in_path)
+    log_file = os.path.join(log_dir, f"{os.path.splitext(os.path.basename(l1.in_path))[0]}_l2r.log")
+
+    # Get the root logger and remove all handlers
+    logger = logging.getLogger()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Set up file and stream handlers
+    file_handler = logging.FileHandler(log_file, mode='w')
+    stream_handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    start_time = time.time()
+    logging.info("Starting run_l2r processing")
+
     out_name = re.sub(r'l1\w+', 'l2r', l1.in_path)
     scale_factor = 1e-5 # NetCDF divide by scale when writing data and multiply when reading
     l1.create_reve_nc(out_name)
@@ -205,6 +228,9 @@ def run_l2r(l1, gain = None):
         f"{len(windows)} windows to process at {window_size} pixels"
     )
 
+    l1.create_var_nc(name="rho_surface", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+    l1.create_var_nc(name="rho_w", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+
     non_empty_windows = []
     for window in tqdm(windows, desc="Filtering windows"):
         y_slice = slice(window.row_off, window.row_off + window.height)
@@ -219,6 +245,7 @@ def run_l2r(l1, gain = None):
             non_empty_windows.append(window)
         else:
             l1.out_ds.variables["rho_surface"][:, y_slice, x_slice] = l1.no_data * scale_factor
+            l1.out_ds.variables["rho_w"][:, y_slice, x_slice] = l1.no_data * scale_factor
 
     logging.info(
         f"{len(non_empty_windows)}  non empty windows to process"
@@ -252,17 +279,31 @@ def run_l2r(l1, gain = None):
     ds = xr.open_mfdataset(all_files, combine="by_coords")
     # ds.to_netcdf("final_rho_surface.nc")
 
-    l1.create_var_nc(name="rho_surface", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
-    l1.create_var_nc(name="rho_w", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+    # If sorted ascending flip it back
+    if np.all(np.diff(ds.y.values) > 0):
+        logging.debug("Y sorted ascending")
+        ds = ds.sortby("y", ascending=False)
 
-    for i in tqdm(range(len(wavelength)), desc="Copying by wavelength in final ds:"):
+    l1.create_var_nc(name="rho_w_c", type="i4", dims=( "wavelength", "y", "x", ), comp="zlib", scale=scale_factor)
+
+    nir_i = np.abs(wavelength - 900).argmin()
+
+    rho_w_ref = ds["rho_w"][nir_i, :, :].values
+    rho_nir_min = np.nanmin(rho_w_ref)
+
+    for i in tqdm(range(len(wavelength)), desc="Computing glint corr in final ds:"):
         rho_s = ds["rho_surface"][i, :, :].values
         np.nan_to_num(rho_s, copy=False, nan=l1.no_data * scale_factor)
+
         rho_w = ds["rho_w"][i, :, :].values
         np.nan_to_num(rho_w, copy=False, nan=l1.no_data * scale_factor)
 
+        rho_w_c = rho_w - (rho_w_ref - rho_nir_min)
+        np.nan_to_num(rho_w_c, copy=False, nan=l1.no_data * scale_factor)
+
         l1.out_ds["rho_surface"][i, :, :] = rho_s
         l1.out_ds["rho_w"][i, :, :] = rho_w
+        l1.out_ds.variables["rho_w_c"][i, :, :] = rho_w_c
 
 
     l1.out_ds["rho_surface"].aod555_dsf = aod555_dsf
@@ -306,16 +347,14 @@ def run_l2r(l1, gain = None):
     blue_i = np.abs(wavelength - 400).argmin()
     green_i = np.abs(wavelength - 550).argmin()
     red_i = np.abs(wavelength - 600).argmin()
-    nir_i = np.abs(wavelength - 850).argmin()
+    nir_i = np.abs(wavelength - 900).argmin()
     swir_i = np.abs(wavelength - 2190).argmin()
 
-    rho_s = ds["rho_surface"].values
-
-    blue = rho_s[blue_i, :, :]
-    green = rho_s[green_i, :, :]
-    red = rho_s[red_i, :, :]
-    nir = rho_s[nir_i, :, :]
-    swir = rho_s[swir_i, :, :]
+    blue = ds.isel(wavelength=blue_i)["rho_surface"].values
+    green = ds.isel(wavelength=green_i)["rho_surface"].values
+    red = ds.isel(wavelength=red_i)["rho_surface"].values
+    nir = ds.isel(wavelength=nir_i)["rho_surface"].values
+    swir = ds.isel(wavelength=swir_i)["rho_surface"].values
 
     ndwi = (green - swir) / (green + swir)
     ndvi = (nir - red) / (nir + red)
@@ -382,23 +421,25 @@ def run_l2r(l1, gain = None):
         l1.out_ds.variables[var][:, :] = data
 
     l1.out_ds.close()
+    # shutil.rmtree(output_dir)
 
-    shutil.rmtree(output_dir)
+    elapsed = time.time() - start_time
+    logging.info(f"Finished run_l2r in {elapsed:.2f} seconds")
 
     return 0
 
 if __name__ == "__main__":
-    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
-    gain = pd.read_csv(gain_path)
+    # gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
+    # gain = pd.read_csv(gain_path)
 
     image_dir = "/D/Data/WISE/"
 
     images = [
-        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1r.nc",
+        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
     ]
 
     for image in images:

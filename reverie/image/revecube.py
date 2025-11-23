@@ -156,8 +156,8 @@ class ReveCube(ABC):
         z = altitude_var[:][0]
         y = in_ds.variables["y"][:].data
         x = in_ds.variables["x"][:].data
-        n_rows = in_ds.dims["y"]
-        n_cols = in_ds.dims["x"]
+        n_rows = in_ds.sizes["y"]
+        n_cols = in_ds.sizes["x"]
 
         grid_mapping = in_ds.variables["grid_mapping"]
 
