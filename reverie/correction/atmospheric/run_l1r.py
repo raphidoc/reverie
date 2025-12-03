@@ -6,6 +6,7 @@ import re
 # from tqdm.contrib.concurrent import process_map
 from tqdm import tqdm
 from pyproj import Transformer
+import pandas as pd
 
 from reverie import ReveCube
 from reverie.utils.helper import get_f0
@@ -27,8 +28,15 @@ import lut
 #
 #     return 0
 
-def compute_rho_t(l1c: ReveCube, bbox = None, wavelength_filter = None):
+def run_l1r(l1c: ReveCube, bbox = None, wavelength_filter = None, gain = None):
     l1c.filter_bad_band()
+
+    if gain is not None:
+        out_name = re.sub(r'l1\w+', 'l1rg', l1c.in_path)
+        l1c.mask_wavelength(gain["wavelength"].values)
+    else:
+        out_name = re.sub(r'l1\w+', 'l1r', l1c.in_path)
+
 
     if wavelength_filter is not None:
         l1c.mask_wavelength(wavelength_filter)
@@ -53,8 +61,6 @@ def compute_rho_t(l1c: ReveCube, bbox = None, wavelength_filter = None):
     # Get extraterrestrial solar irradiance for WISE bands
     doy = l1c.acq_time_z.timetuple().tm_yday
     f0 = get_f0(doy, wavelength)
-
-    out_name = re.sub(r'l1\w+', 'l1r', l1c.in_path)
 
     scale_factor = 1e-5
     # scale = np.reciprocal(float(scale))
@@ -82,7 +88,13 @@ def compute_rho_t(l1c: ReveCube, bbox = None, wavelength_filter = None):
                 f0[i] * np.cos(np.deg2rad(l1c.in_ds["sun_zenith"]))
         )
 
-        # rho_t = rho_t * scale
+        if gain is not None:
+            mask = np.int32(gain["wavelength"]) == np.int32(wl)
+            if not mask.any():
+                raise ValueError(f"Wavelength {wl} not found in gain table")
+            gain_value = gain.loc[mask, "gain"].values[0]
+
+            rho_t = rho_t * gain_value
 
         # Assign missing value
         np.nan_to_num(rho_t, copy=False, nan=l1c.no_data * scale_factor)
@@ -163,17 +175,24 @@ if __name__ == "__main__":
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
+        "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1cg.nc"
     ]
 
     lut_aer = lut.load_aer()
     wavelength_lut = lut_aer["wavelength"].values
 
-    bbox = {"lon": ( -64.44237, -64.23789), "lat": (49.7126, 49.84078)}
+    # bbox = {"lon": ( -64.44237, -64.23789), "lat": (49.7126, 49.84078)}
     # Reduced bbox for dev
     # bbox = {"lon": (-64.36808, -64.35322), "lat": (49.80347, 49.81397)}
+
+    bbox = None
+
+    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
+    gain = pd.read_csv(gain_path)
 
     for image in images:
         l1c = ReveCube.from_reve_nc(os.path.join(image_dir, image))
 
-        compute_rho_t(l1c, bbox, wavelength_lut)
+        run_l1r(l1c, bbox, wavelength_lut, gain=gain)
+        # run_l1r(l1c, bbox, wavelength_lut, gain=None)

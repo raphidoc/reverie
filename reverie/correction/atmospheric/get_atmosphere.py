@@ -1,8 +1,10 @@
 import os
 
 import numpy as np
-import scipy.interpolate as sp
-from scipy.interpolate import RegularGridInterpolator
+# import scipy.interpolate as sp
+from cupyx.scipy.interpolate import RegularGridInterpolator
+import cupy as cp
+# from scipy.interpolate import RegularGridInterpolator
 import xarray as xr
 
 from reverie import ReveCube
@@ -14,53 +16,56 @@ def build_aer_interpolators(aer_lut):
     Returns dict of interpolators and the grid points tuple.
     """
     # Convert coordinate arrays to numpy (float32) and ensure order matches LUT dims
-    sol_zen = np.asarray(aer_lut.sol_zen.values, dtype=np.float32)
-    view_zen = np.asarray(aer_lut.view_zen.values, dtype=np.float32)
-    rel_az = np.asarray(aer_lut.relative_azimuth.values, dtype=np.float32)
-    aot550 = np.asarray(aer_lut.aot550.values, dtype=np.float32)
-    target_pressure = np.asarray(aer_lut.target_pressure.values, dtype=np.float32)
-    sensor_alt = np.asarray(aer_lut.sensor_altitude.values, dtype=np.float32)
-    wavelength = np.asarray(aer_lut.wavelength.values, dtype=np.float32)
+    sol_zen = cp.asarray(aer_lut.sol_zen.values, dtype=cp.float32)
+    view_zen = cp.asarray(aer_lut.view_zen.values, dtype=cp.float32)
+    rel_az = cp.asarray(aer_lut.relative_azimuth.values, dtype=cp.float32)
+    aot550 = cp.asarray(aer_lut.aot550.values, dtype=cp.float32)
+    target_pressure = cp.asarray(aer_lut.target_pressure.values, dtype=cp.float32)
+    sensor_alt = cp.asarray(aer_lut.sensor_altitude.values, dtype=cp.float32)
+    wavelength = cp.asarray(aer_lut.wavelength.values, dtype=cp.float32)
 
     points = (sol_zen, view_zen, rel_az, aot550, target_pressure, sensor_alt, wavelength)
 
-    # Ensure LUT data arrays are contiguous np.float32 in memory
+    # Ensure LUT data arrays are contiguous cp.float32 in memory
     # variable names used in original code:
-    rho_path_vals = np.asarray(aer_lut["atmospheric_reflectance_at_sensor"].values, dtype=np.float32)
-    t_ra_vals = np.asarray(aer_lut["total_scattering_trans_total"].values, dtype=np.float32)
-    s_ra_vals = np.asarray(aer_lut["spherical_albedo_total"].values, dtype=np.float32)
+    rho_path_vals = cp.asarray(aer_lut["atmospheric_reflectance_at_sensor"].values, dtype=cp.float32)
+    t_ra_vals = cp.asarray(aer_lut["total_scattering_trans_total"].values, dtype=cp.float32)
+    s_ra_vals = cp.asarray(aer_lut["spherical_albedo_total"].values, dtype=cp.float32)
+    sky_glint_vals = cp.asarray(aer_lut["sky_glint_total"].values, dtype=cp.float32)
 
     # Build interpolators (bounds_error=False to allow extrapolation as nan/fill_value)
     interp_rho = RegularGridInterpolator(points, rho_path_vals,
-                                        method='linear', bounds_error=True, fill_value=np.nan)
+                                        method='linear', bounds_error=True, fill_value=cp.nan)
     interp_t = RegularGridInterpolator(points, t_ra_vals,
-                                       method='linear', bounds_error=True, fill_value=np.nan)
+                                       method='linear', bounds_error=True, fill_value=cp.nan)
     interp_s = RegularGridInterpolator(points, s_ra_vals,
-                                       method='linear', bounds_error=True, fill_value=np.nan)
+                                       method='linear', bounds_error=True, fill_value=cp.nan)
+    interp_sky_glint = RegularGridInterpolator(points, sky_glint_vals,
+                                       method='linear', bounds_error=True, fill_value=cp.nan)
 
-    return dict(rho=interp_rho, t=interp_t, s=interp_s), points
+    return dict(rho=interp_rho, t=interp_t, s=interp_s, sky_glint=interp_sky_glint), points
 
 def build_gas_interpolator(gas_lut):
     """
     Build RegularGridInterpolator for gas LUT variable global_gas_trans_total.
     """
-    sol_zen = np.asarray(gas_lut.sol_zen.values, dtype=np.float32)
-    view_zen = np.asarray(gas_lut.view_zen.values, dtype=np.float32)
-    rel_az = np.asarray(gas_lut.relative_azimuth.values, dtype=np.float32)
-    water = np.asarray(gas_lut.water.values, dtype=np.float32)
-    ozone = np.asarray(gas_lut.ozone.values, dtype=np.float32)
-    target_pressure = np.asarray(gas_lut.target_pressure.values, dtype=np.float32)
-    sensor_alt = np.asarray(gas_lut.sensor_altitude.values, dtype=np.float32)
-    wavelength = np.asarray(gas_lut.wavelength.values, dtype=np.float32)
+    sol_zen = cp.asarray(gas_lut.sol_zen.values, dtype=cp.float32)
+    view_zen = cp.asarray(gas_lut.view_zen.values, dtype=cp.float32)
+    rel_az = cp.asarray(gas_lut.relative_azimuth.values, dtype=cp.float32)
+    water = cp.asarray(gas_lut.water.values, dtype=cp.float32)
+    ozone = cp.asarray(gas_lut.ozone.values, dtype=cp.float32)
+    target_pressure = cp.asarray(gas_lut.target_pressure.values, dtype=cp.float32)
+    sensor_alt = cp.asarray(gas_lut.sensor_altitude.values, dtype=cp.float32)
+    wavelength = cp.asarray(gas_lut.wavelength.values, dtype=cp.float32)
 
     points = (sol_zen, view_zen, rel_az, water, ozone, target_pressure, sensor_alt, wavelength)
-    t_gas_vals = np.asarray(gas_lut["global_gas_trans_total"].values, dtype=np.float32)
+    t_gas_vals = cp.asarray(gas_lut["global_gas_trans_total"].values, dtype=cp.float32)
 
     interp_tgas = RegularGridInterpolator(points, t_gas_vals,
-                                         method='linear', bounds_error=True, fill_value=np.nan)
+                                         method='linear', bounds_error=True, fill_value=cp.nan)
     return interp_tgas, points
 
-def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, interp_s):
+def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, interp_s, interp_sky_glint):
 
     # aer_lut = lut.load_aer()
 
@@ -89,6 +94,10 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
                 ["wavelength", "y", "x"],
                 np.full((len(wavelength), len(y), len(x)), np.nan, np.float32),
             ),
+            sky_glint_ra=(
+                ["wavelength", "y", "x"],
+                np.full((len(wavelength), len(y), len(x)), np.nan, np.float32),
+            ),
         ),
         coords=dict(
             wavelength=wavelength,
@@ -103,6 +112,7 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
     rho_path_ra = np.full(window_shape, np.nan, np.float32)
     t_ra = np.full(window_shape, np.nan, np.float32)
     s_ra = np.full(window_shape, np.nan, np.float32)
+    sky_glint_ra = np.full(window_shape, np.nan, np.float32)
 
     # flat_rho_path_ra = rho_path_ra.reshape(len(wavelength), -1)
     # flat_t_ra = t_ra.reshape(len(wavelength), -1)
@@ -140,11 +150,12 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
                         "aerosol_optical_thickness_at_555_nm"
                     ].values
 
-    sun_zenith_xi = image.in_ds.isel(x=x_slice, y=y_slice)["sun_zenith"].values[valid_mask]
-    view_zenith_xi = image.in_ds.isel(x=x_slice, y=y_slice)["view_zenith"].values[valid_mask]
-    relative_azimuth_xi = image.in_ds.isel(x=x_slice, y=y_slice)["relative_azimuth"].values[valid_mask]
-    traget_pressure_xi = image.in_ds["surface_air_pressure"].values
-    sensor_altitude_xi = image.z.values
+
+    sun_zenith_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["sun_zenith"].values[valid_mask], dtype=cp.float32)
+    view_zenith_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["view_zenith"].values[valid_mask], dtype=cp.float32)
+    relative_azimuth_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["relative_azimuth"].values[valid_mask], dtype=cp.float32)
+    traget_pressure_xi = cp.asarray(image.in_ds["surface_air_pressure"].values, dtype=cp.float32)
+    sensor_altitude_xi = cp.asarray(image.z.values, dtype=cp.float32)
 
     # n_wavelengths = len(wavelength)
     #
@@ -167,15 +178,15 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
     # ])
 
     for i, wl in enumerate(wavelength):
-        aer_xi = np.hstack(
+        aer_xi = cp.hstack(
             [
                 sun_zenith_xi.reshape(-1, 1),
                 view_zenith_xi.reshape(-1, 1),
                 relative_azimuth_xi.reshape(-1, 1),
-                np.repeat(aod555_xi,n_pixels,).reshape(-1, 1),
-                np.repeat(traget_pressure_xi, n_pixels).reshape(-1, 1),
-                np.repeat(sensor_altitude_xi, n_pixels).reshape(-1, 1),
-                np.repeat(wl, n_pixels).reshape(-1, 1),
+                cp.repeat(aod555_xi,n_pixels,).reshape(-1, 1),
+                cp.repeat(traget_pressure_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(sensor_altitude_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(wl, n_pixels).reshape(-1, 1),
             ]
         )
 
@@ -185,7 +196,7 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
         #     values=aer_lut["atmospheric_reflectance_at_sensor"][:, :, :, :, :, :, :].values,
         #     xi=aer_xi,
         # )
-        rho_path_ra_values = interp_rho(aer_xi)
+        rho_path_ra_values = interp_rho(aer_xi).get()
         rho_path_ra[valid_mask] = rho_path_ra_values
         ra_components["rho_path"][i, :, :] = rho_path_ra
 
@@ -196,7 +207,7 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
         #            ].values,
         #     xi=aer_xi,
         # )
-        t_ra_values = interp_t(aer_xi)
+        t_ra_values = interp_t(aer_xi).get()
         t_ra[valid_mask] = t_ra_values
         ra_components["trans_ra"][i, :, :] = t_ra
 
@@ -207,9 +218,13 @@ def get_ra(image: ReveCube, window, wavelength, aod555, interp_rho, interp_t, in
         #            ].values,
         #     xi=aer_xi,
         # )
-        s_ra_values = interp_s(aer_xi)
+        s_ra_values = interp_s(aer_xi).get()
         s_ra[valid_mask] = s_ra_values
         ra_components["spherical_albedo_ra"][i, :, :] = s_ra
+
+        sky_glint_ra_values = interp_sky_glint(aer_xi).get()
+        sky_glint_ra[valid_mask] = sky_glint_ra_values
+        ra_components["sky_glint_ra"][i, :, :] = sky_glint_ra
 
     # t_ra_values = interp_t(aer_xi)
     # t_ra_values = t_ra_values.reshape(len(wavelength), flat_valid_mask.sum())
@@ -293,13 +308,13 @@ def get_gas(image: ReveCube, window, wavelength, interp_tgas):
         .reshape(-1, 1)
     )
 
-    sun_zenith_xi = image.in_ds.isel(x=x_slice, y=y_slice)["sun_zenith"].values[valid_mask]
-    view_zenith_xi = image.in_ds.isel(x=x_slice, y=y_slice)["view_zenith"].values[valid_mask]
-    relative_azimuth_xi = image.in_ds.isel(x=x_slice, y=y_slice)["relative_azimuth"].values[valid_mask]
-    water_vapor_xi = image.in_ds["atmosphere_mass_content_of_water_vapor"].values
-    ozone_xi = image.in_ds["equivalent_thickness_at_stp_of_atmosphere_ozone_content"].values
+    sun_zenith_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["sun_zenith"].values[valid_mask], dtype=cp.float32)
+    view_zenith_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["view_zenith"].values[valid_mask], dtype=cp.float32)
+    relative_azimuth_xi = cp.asarray(image.in_ds.isel(x=x_slice, y=y_slice)["relative_azimuth"].values[valid_mask], dtype=cp.float32)
+    water_vapor_xi = cp.asarray(image.in_ds["atmosphere_mass_content_of_water_vapor"].values, dtype=cp.float32)
+    ozone_xi = cp.asarray(image.in_ds["equivalent_thickness_at_stp_of_atmosphere_ozone_content"].values, dtype=cp.float32)
     traget_pressure_xi = image.in_ds["surface_air_pressure"].values
-    sensor_altitude_xi = image.z.values
+    sensor_altitude_xi = cp.asarray(image.z.values, dtype=cp.float32)
 
     # n_wavelengths = len(wavelength)
     #
@@ -324,16 +339,16 @@ def get_gas(image: ReveCube, window, wavelength, interp_tgas):
     # ])
 
     for i, wl in enumerate(wavelength):
-        gas_xi = np.hstack(
+        gas_xi = cp.hstack(
             [
                 sun_zenith_xi.reshape(-1, 1),
                 view_zenith_xi.reshape(-1, 1),
                 relative_azimuth_xi.reshape(-1, 1),
-                np.repeat(water_vapor_xi, n_pixels).reshape(-1, 1),
-                np.repeat(ozone_xi, n_pixels).reshape(-1, 1),
-                np.repeat(traget_pressure_xi, n_pixels).reshape(-1, 1),
-                np.repeat(sensor_altitude_xi, n_pixels).reshape(-1, 1),
-                np.repeat(wl, n_pixels).reshape(-1, 1),
+                cp.repeat(water_vapor_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(ozone_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(traget_pressure_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(sensor_altitude_xi, n_pixels).reshape(-1, 1),
+                cp.repeat(wl, n_pixels).reshape(-1, 1),
             ]
         )
 
@@ -343,7 +358,7 @@ def get_gas(image: ReveCube, window, wavelength, interp_tgas):
         #     values=gas_lut["global_gas_trans_total"][:, :, :, :, :, :, :, :].values,
         #     xi=gas_xi,
         # )
-        t_gas_values = interp_tgas(gas_xi)
+        t_gas_values = interp_tgas(gas_xi).get()
         t_gas[valid_mask] = t_gas_values
         gas_components["t_gas"][i, :, :] = t_gas
 

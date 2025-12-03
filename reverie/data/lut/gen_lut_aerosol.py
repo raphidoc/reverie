@@ -72,6 +72,8 @@ import numpy as np
 # from p_tqdm import p_uimap
 import json
 
+from reverie.correction.surface.water_refractive_index import get_water_refractive_index
+from reverie.correction.surface.rayleigh import fresnel_reflectance
 
 def format_estimated_time(estimated_time):
     if estimated_time >= 60.0 * 60 * 24 * 365 * 100:
@@ -181,6 +183,13 @@ def create_gas_output_nc(filename, coords, compression=None, complevel=None):
         compression=compression,
         complevel=complevel,
     )
+    nc.createVariable(
+        "sky_glint_total",
+        "f4",
+        dimensions,
+        compression=compression,
+        complevel=complevel,
+    )
 
     return nc
 
@@ -192,6 +201,7 @@ def run_model_and_accumulate(
     atmospheric_reflectance_at_sensor,
     total_scattering_trans_total,
     spherical_albedo_total,
+    sky_glint_total
 ):
     global counter  # Declare counter as global
 
@@ -214,11 +224,28 @@ def run_model_and_accumulate(
         # if math.isnan(float(temp["atmospheric_reflectance_at_sensor"])):
         #     print("atmospheric_path_radiance is NaN ...")
 
-        atmospheric_reflectance_at_sensor[i] = float(
-            temp["atmospheric_reflectance_at_sensor"]
-        )
+        atmospheric_reflectance_at_sensor[i] = float(temp["atmospheric_reflectance_at_sensor"])
         total_scattering_trans_total[i] = float(temp["total_scattering_trans_total"])
         spherical_albedo_total[i] = float(temp["spherical_albedo_total"])
+
+        tau_ra = float(temp["optical_depth_total_total"])
+        phase_ra = float(temp["phase_function_I_total"])
+        theta_s = float(temp["solar_zenith_[degree]"])* np.pi / 180
+        theta_v = float(temp["view_zenith_[degree]"]) * np.pi / 180
+        wl = float(temp["monochromatic_wavelength_[um]"]) * 1e3
+
+        n_w = get_water_refractive_index(
+        salinity = 30,
+        temperature = 12,
+        wavelength = wl
+    )
+
+        fr_theta_s = fresnel_reflectance(theta_s, n_w)
+        fr_theta_v = fresnel_reflectance(theta_v, n_w)
+
+        phase_ra_fr = (fr_theta_s + fr_theta_v) * phase_ra
+
+        sky_glint_total[i] = (tau_ra * phase_ra_fr) / (4 * np.cos(theta_s) * np.cos(theta_v))
 
         # counter += 1
 
@@ -293,7 +320,7 @@ if __name__ == "__main__":
         # np.arange(10, 61, 10).tolist(),  # sun zenith
         np.arange(0, 31, 10).tolist(),  # view zenith
         # np.arange(0, 181, 10).tolist(),  # relative azimuth
-        [70,80,90,100,110],
+        [60,70,80,90,100,110,120],
         [
             0,
             5.0e-2,
@@ -303,7 +330,7 @@ if __name__ == "__main__":
         ], # AOD 555
         [750., 1013.],  # pressure at target mb
         [-3, -4],  # sensor altitude -km
-        np.arange(0.34, 0.81, 0.01).tolist(),  # wavelength
+        np.arange(0.34, 1, 0.01).tolist(),  # wavelength
     ]
 
     # Test dimension
@@ -330,6 +357,7 @@ if __name__ == "__main__":
     atmospheric_reflectance_at_sensor = [0] * len(combination)
     total_scattering_trans_total = [0] * len(combination)
     spherical_albedo_total = [0] * len(combination)
+    sky_glint_total = [0] * len(combination)
 
     # Create commands
     commands = []
@@ -397,6 +425,7 @@ if __name__ == "__main__":
                     atmospheric_reflectance_at_sensor,
                     total_scattering_trans_total,
                     spherical_albedo_total,
+                    sky_glint_total
                 )
             )
 
@@ -458,6 +487,7 @@ if __name__ == "__main__":
     atmospheric_reflectance_at_sensor = np.reshape(atmospheric_reflectance_at_sensor, shape)
     total_scattering_trans_total = np.reshape(total_scattering_trans_total, shape)
     spherical_albedo_total = np.reshape(spherical_albedo_total, shape)
+    sky_glint_total = np.reshape(sky_glint_total, shape)
 
     # Write the results to the file
     nc.variables["atmospheric_reflectance_at_sensor"][
@@ -469,5 +499,8 @@ if __name__ == "__main__":
     nc.variables["spherical_albedo_total"][
         :, :, :, :, :, :, :
     ] = spherical_albedo_total
+    nc.variables["sky_glint_total"][
+        :, :, :, :, :, :, :
+    ] = sky_glint_total
 
     nc.close()

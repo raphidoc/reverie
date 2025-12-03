@@ -292,12 +292,12 @@ if __name__ == "__main__":
         # np.arange(10, 61, 10).tolist(),  # sun zenith
         np.arange(0, 31, 10).tolist(),  # view zenith
         # np.arange(0, 181, 10).tolist(),  # relative azimuth
-        [70,80,90,100,110],
-        [0, 1.0, 2.0], # H2O g/cm2
+        [60,70,80,90,100,110,120],
+        [0, 1.0, 2.0, 3.0], # H2O g/cm2
         [0, 0.3, 0.5],  # Ozone cm-atm https://gml.noaa.gov/ozwv/dobson/papers/wmobro/ozone.html
         [750., 1013.],  # pressure at target mb
         [-3, -4],  # sensor altitude -km
-        np.arange(0.34, 0.81, 0.01).tolist(),  # wavelength
+        np.arange(0.34, 1, 0.01).tolist(),  # wavelength
     ]
 
     # Test dimension

@@ -55,6 +55,7 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
     gas_interp, gas_points = atm.build_gas_interpolator(lut.load_gas())
 
     aod555 = l1.in_ds.aerosol_optical_thickness_at_555_nm.values
+    p_mb = l1.in_ds.surface_air_pressure.values
 
     l1.mask_wavelength(np.unique(in_situ["wavelength"]))
     l1.mask_wavelength(lut.load_aer().wavelength.values)
@@ -79,12 +80,13 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
         s_ra = ra_components["spherical_albedo_ra"].values
         t_g = gas_component["t_gas"].values
 
-        theta_0 = np.deg2rad(image_sub["sun_zenith"])
-        theta_v = np.deg2rad(image_sub["view_zenith"])
-        phi_0 = np.deg2rad(image_sub["sun_azimuth"])
-        phi_v = np.deg2rad(image_sub["view_azimuth"])
+        # theta_0 = np.deg2rad(image_sub["sun_zenith"])
+        # theta_v = np.deg2rad(image_sub["view_zenith"])
+        # phi_0 = np.deg2rad(image_sub["sun_azimuth"])
+        # phi_v = np.deg2rad(image_sub["view_azimuth"])
 
-        sky_glint = get_sky_glint(l1.wavelength, theta_0, theta_v, phi_0, phi_v, 1007)
+        # sky_glint = get_sky_glint(l1.wavelength, theta_0, theta_v, phi_0, phi_v, p_mb)
+        sky_glint = ra_components["sky_glint_ra"].values
 
         if l1.valid_mask is None:
             l1.get_valid_mask(window=window)
@@ -218,7 +220,7 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1r.nc",
         "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1r.nc",
         "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1r.nc",
         # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",

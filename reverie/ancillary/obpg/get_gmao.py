@@ -58,7 +58,7 @@ def get_gmao(l1):
     if not os.path.exists(met1_path):
         # request = f"/cgi/getfile/{met1}"
         request = f"/ob/getfile/{met1}"
-        msg = f"Retrieving anchillary file from server: {met1}"
+        msg = f"Retrieving ancillary file from server: {met1}"
         print(msg)
 
         status = OBPGSession.httpdl(

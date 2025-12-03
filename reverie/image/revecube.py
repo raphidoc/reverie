@@ -1014,7 +1014,7 @@ class ReveCube(ABC):
 
             pixex_df = pd.concat([pixex_df, temp_pixex_df], axis=0)
 
-        if os.path.isdir(output_box):
+        if output_box is not None and os.path.isdir(output_box):
 
             polygons = []
             uuids = []

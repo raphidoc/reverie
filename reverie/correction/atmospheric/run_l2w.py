@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import shutil
+import time
 
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
@@ -10,10 +11,11 @@ import numpy as np
 import xarray as xr
 import glob
 from functools import partial
+import netCDF4
 
 from reverie import ReveCube
-from reverie.correction.surface.get_glint import get_glint_z17
-from reverie.correction.surface.rayleigh import get_sky_glint
+from reverie.correction.surface.rayleigh import fresnel_reflectance
+from reverie.correction.surface.water_refractive_index import get_water_refractive_index
 
 # def process_window_l2w(window, l2s_path, output_dir, aod555):
 #     # Load input cube inside the process (avoid sharing in memory)
@@ -67,37 +69,113 @@ from reverie.correction.surface.rayleigh import get_sky_glint
 
 def run_l2w(l2r):
 
-    out_name = re.sub(r'l2r', 'l2w', l2r.in_path)
+    log_dir = os.path.dirname(l2r.in_path)
+    log_file = os.path.join(log_dir, f"{os.path.splitext(os.path.basename(l2r.in_path))[0]}_l2w.log")
+
+    # Get the root logger and remove all handlers
+    logger = logging.getLogger()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Set up file and stream handlers
+    file_handler = logging.FileHandler(log_file, mode='w')
+    stream_handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    start_time = time.time()
+    logging.info("Starting run_l2w processing")
+
+    if "l2rg" in l2r.in_path:
+        out_name = re.sub(r'l2rg', 'l2wg', l2r.in_path)
+    else:
+        out_name = re.sub(r'l2r', 'l2w', l2r.in_path)
+
     scale_factor = 1e-5 # NetCDF divide by scale when writing data and multiply when reading
-    l2r.create_reve_nc(out_name)
-    l2r.create_var_nc(
-        name="rho_w_c",
-        type="i4",
-        dims=(
-            "wavelength",
-            "y",
-            "x",
-        ),
-        comp="zlib",
-        complevel=1,
-        scale=scale_factor,
-    )
+    # l2r.create_reve_nc(out_name)
+
 
     wavelength = l2r.wavelength
-
     nir_i = np.abs(wavelength - 900).argmin()
 
-    rho_nir_min = np.nanmin(l2r.in_ds["rho_w"][nir_i, :, :])
-    rho_w_ref = l2r.in_ds["rho_w"][nir_i, :, :].values
+    # Hochberg et al 2003
+    rho_nir = l2r.in_ds["rho_w"][nir_i, :, :].values
+    rho_nir_min = np.nanmin(rho_nir)
+    # np.nanpercentile(rho_nir, 0.1)
+    # rho_nir_min = np.nanpercentile(rho_nir[rho_nir >= 0], 0.1)
+    ref_sub = rho_nir - rho_nir_min
+
+    logging.info("Residual glint h03 rho_w({}) = {}".format(wavelength[nir_i], rho_nir_min))
+
+    # Gao and li 2021
+    n_w = get_water_refractive_index(30, 12, wavelength)
+    rho_f = fresnel_reflectance(0, n_w)
+    rho_f_nir = rho_f[nir_i]
+    ref_ratio = rho_nir / rho_f_nir
+
+    logging.info("Residual glint (ref_ratio) g21  rho_f({}) = {}".format(wavelength[nir_i], ref_ratio))
+
+    l2r.in_ds.close()
+    l2r.out_ds = netCDF4.Dataset(l2r.in_path, "a", format="NETCDF4")
+    #  TODO: add check for existing var and remove if so
+
+    if "rho_w_h03" not in l2r.out_ds.variables:
+        l2r.create_var_nc(
+            name="rho_w_h03",
+            type="i4",
+            dims=(
+                "wavelength",
+                "y",
+                "x",
+            ),
+            comp="zlib",
+            complevel=1,
+            scale=scale_factor,
+        )
+
+    if "rho_w_g21" not in l2r.out_ds.variables:
+        l2r.create_var_nc(
+            name="rho_w_g21",
+            type="i4",
+            dims=(
+                "wavelength",
+                "y",
+                "x",
+            ),
+            comp="zlib",
+            complevel=1,
+            scale=scale_factor,
+        )
+
+    if l2r.no_data is None:
+        l2r.no_data = math.trunc(netCDF4.default_fillvals["i4"] * scale_factor)
 
     for i, wl in tqdm(enumerate(l2r.wavelength), desc="Residual glint correction"):
-        rho_w = l2r.in_ds.isel(wavelength=i)["rho_w"]
-        rho_w_c = rho_w - (rho_w_ref - rho_nir_min)
+        rho_w = l2r.out_ds.variables["rho_w"][i,:,:]
 
-        np.nan_to_num(rho_w_c, copy=False, nan=l2r.no_data * scale_factor)
+        rho_w_h03 = rho_w - ref_sub
+        rho_w_g21 = rho_w - (rho_f[i] * ref_ratio)
+
+        np.nan_to_num(rho_w_h03, copy=False, nan=l2r.no_data * scale_factor)
+        np.nan_to_num(rho_w_g21, copy=False, nan=l2r.no_data * scale_factor)
         # rho_t = np.round(rho_t).astype("int32")
 
-        l2r.out_ds.variables["rho_w_c"][i, :, :] = rho_w_c
+        l2r.out_ds.variables["rho_w_h03"][i, :, :] = rho_w_h03
+        l2r.out_ds.variables["rho_w_g21"][i, :, :] = rho_w_g21
+
+    # for i, wl in tqdm(enumerate(l2r.wavelength), desc="Residual glint correction"):
+    #     rho_w = l2r.in_ds.isel(wavelength=i)["rho_w"]
+    #     rho_w_c = rho_w - (rho_nir - residual_glint)
+    #
+    #     np.nan_to_num(rho_w_c, copy=False, nan=l2r.no_data * scale_factor)
+    #     # rho_t = np.round(rho_t).astype("int32")
+    #
+    #     l2r.out_ds.variables["rho_w_c"][i, :, :] = rho_w_c
 
 
     # ρρcc(λλ) = ρρ(λλ) − (ρρ(λλcc) − ρρmin (λλcc))
@@ -181,7 +259,7 @@ def run_l2w(l2r):
     # np.nan_to_num(rho_w, copy=False, nan=l2r.no_data * scale_factor)
     # l2r.out_ds["rho_w"][:, :, :] = rho_w
     #
-    # l2r.out_ds.close()
+    l2r.out_ds.close()
     #
     # shutil.rmtree(output_dir)
 
@@ -191,14 +269,14 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
+        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l2rg.nc",
+        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2rg.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2rg.nc",
     ]
 
     for image in images:
 
-        l2s = ReveCube.from_reve_nc(os.path.join(image_dir, image))
-        run_l2w(l2s)
+        l2r = ReveCube.from_reve_nc(os.path.join(image_dir, image))
+        run_l2w(l2r)

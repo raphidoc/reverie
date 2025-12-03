@@ -5,17 +5,178 @@ from reverie.correction.surface.water_refractive_index import get_water_refracti
 
 # function ray_tau
 # computes Rayleigh optical thickness for wl in microns
+# Hansen and Travis 1974
 # QV 2016-12-14
 
-def ray_tau(wl, Patm=1013.25):
+def ray_tau_ht74(wl, Patm=1013.25):
     # Wavelength in um
     wl = wl * 1e-3
     tau_ray = Patm/1013.25*(0.008569*np.power(wl,-4)*(1.+0.0113*np.power(wl,-2)+0.00013*np.power(wl,-4)))
     return tau_ray
 
+# def ray_tau_b99(wl, p_mb=1013.25):
+#     """
+#     Compute Rayleigh optical depth according to Bodhaine et al. 1999
+#     Parameters
+#     ----------
+#     wl
+#     Patm
+#
+#     Returns
+#     -------
+#
+#     """
+#     # Wavelength in um
+#     wl_um = wl * 1e-3
+#     wl_cm = wl * 1e-7
+#
+#     # Peck and Reeder refractive index of dry air at 300 ppm CO2
+#     n_300 = 8060.51 + (2480990/(132.274-np.power(wl_um, -2))) + (17455.7/(39.32957-np.power(wl_um, -2)))
+#     # Scale for the desired concentration of CO2 in part per volume
+#     u_co2 = 300
+#     n_air =  1 + 0.54*(u_co2 - 0.0003)
+#
+#     # depolarisation ratio for N2 and O2
+#     F_n2 = 1.034 + 3.17 * np.power(10., -4) * (1/ np.power(wl_um, 2))
+#
+#     F_o2 = 1.096 + 1.385 * np.power(10., -3) * (1 / np.power(wl_um, 2)) + 1.448 * np.power(10., -4) * (1 / np.power(wl_um, 4))
+#
+#     # CO2 concentration in part per volume per percent
+#     u_co2_ppvpp = 0.036 # = 360 ppm
+#
+#     # depolarisation ratio of air
+#     rho = (78.084 * F_n2 + 20.946 * F_o2 + 0.934 * 1.00 + u_co2_ppvpp * 1.15) / (78.084 + 20.946 + 0.9346 + u_co2_ppvpp)
+#
+#     # scattering cross section (cm-2 molecule-1)
+#     N_s = 2.546899 * 1e19
+#     b_cross_section = ((24 * np.power(np.pi, 3) * np.power(np.power(n_air, 2) - 1, 2)) /
+#     (np.power(wl_cm, 4) * np.power(N_s, 2) * np.power(np.power(n_air, 2) + 2, 2))) * ((6 + 3 * rho) / (6 - 7 *rho))
+#
+#     # Pressure in dyn cm-2
+#     p = p_mb * 1e3
+#
+#     # Avogadro number
+#     a = 6.0221367 * 1e23
+#
+#     # mean molecular weight of dry air
+#     # u_co2 in part per volume
+#     u_co2_ppv = 0.00036 # = 360 ppm
+#     m_a = 15.0556 * u_co2_ppv + 28.9595
+#
+#     # heigh above sea level (meter)
+#     z = 0
+#     lat = np.deg2rad(48)
+#
+#     # g0 sea level acceleration of gravity (cm s-2)
+#     g0 = 980.6160 * (1 - 0.0026373 * np.cos(2 * lat) + 0.0000059 * np.power(np.cos(2 * lat), 2))
+#
+#     # gravitational acceleration (cm s-2) at altitude z (meter)
+#     g = (g0 - (3.085462 * np.power(10., -4) + 2.27 * np.power(10., -7) * np.cos(2 * lat)) * z
+#          + (7.254 * np.power(10., -11) + 1.0 * np.power(10., -13) * np.cos(2 * lat)) * np.power(z, 2)
+#          - (1.517 * np.power(10., -17) + 6 * np.power(10., -20) * np.cos(2 * lat)) * np.power(z, 3))
+#
+#     tau_r = b_cross_section * ((p * a) / (m_a * g))
+#
+#     return tau_r
+
+def ray_tau_b99(wl_nm, p_mb=1013.25, co2_ppm=400., lat_deg=45., z_m=0):
+    """
+    Rayleigh optical depth following Bodhaine et al. (1999)
+    Wavelength-dependent depolarization and refractivity included.
+    Parameters
+    ----------
+    wl_nm : scalar or array
+        Wavelength in nanometers
+    p_mb : float
+        Pressure in millibars
+    co2_ppm : float
+        CO₂ concentration (ppm)
+    lat_deg : float
+        Latitude in degrees
+    z_m : float
+        Altitude in meters
+    """
+
+    wl_nm  = np.asarray(wl_nm, dtype=float)
+    wl_um  = wl_nm * 1e-3         # micrometers
+    wl_cm  = wl_nm * 1e-7         # cm
+
+    # -----------------------------
+    # 1. Refractive index n(λ)
+    #    Peck & Reeder (1972) used in Bodhaine
+    # -----------------------------
+    n_300_minus1 = 1e-8 * (
+        8060.51 +
+        2480990.0 / (132.274 - 1.0/wl_um**2) +
+        17455.7  / (39.32957 - 1.0/wl_um**2)
+    )
+
+    # CO₂ correction (Bodhaine)
+    dn_co2 = (co2_ppm - 300.0) * 1.15e-8
+
+    n_air = 1.0 + n_300_minus1 + dn_co2
+
+    # -----------------------------
+    # 2. Depolarization (King factor)
+    #    Wavelength-dependent N₂ and O₂ terms from Bodhaine
+    # -----------------------------
+    F_N2 = 1.034 + 3.17e-4 / wl_um**2
+    F_O2 = 1.096 + 1.385e-3 / wl_um**2 + 1.448e-4 / wl_um**4
+
+    # volume fractions (dry air)
+    f_N2  = 0.78084
+    f_O2  = 0.20946
+    f_Ar  = 0.00934
+    f_CO2 = co2_ppm * 1e-6
+
+    # Depolarization ratio of the mixture
+    rho = (
+        f_N2  * (F_N2 - 1) +
+        f_O2  * (F_O2 - 1) +
+        f_Ar  * (1.00 - 1) +
+        f_CO2 * (1.15 - 1)
+    )
+
+    # King factor K(λ) = (6 + 3ρ) / (6 - 7ρ)
+    K = (6.0 + 3.0*rho) / (6.0 - 7.0*rho)
+
+    # -----------------------------
+    # 3. Rayleigh scattering cross-section
+    # -----------------------------
+    Ns = 2.546899e19  # molecule cm⁻³ at STP (used in B99)
+
+    term = ((n_air**2 - 1) / (n_air**2 + 2))**2
+
+    sigma = (24.0 * np.pi**3 / (Ns**2 * wl_cm**4)) * term * K
+
+    # -----------------------------
+    # 4. Optical depth τ = σ * column density
+    # -----------------------------
+    p_dyn = p_mb * 1000.0  # mb → dyn cm⁻²
+
+    # Mean molecular mass (g/mol)
+    M = 28.9595 + 15.0556 * f_CO2
+
+    NA = 6.0221367e23
+
+    lat = np.deg2rad(lat_deg)
+
+    # Gravity (cm/s²) from Bodhaine eqn.
+    g0 = 980.6160 * (1 - 0.0026373*np.cos(2*lat) + 5.9e-6*np.cos(2*lat)**2)
+    # Altitude corrections usually negligible, skipped for clarity
+    g = g0
+
+    tau = sigma * (p_dyn * NA) / (M * g)
+
+    return tau
+
 
 def fresnel_reflectance(theta, n_w):
     n_air = 1
+
+    if np.allclose(theta, 0):
+        r = ((n_air - n_w) / (n_air + n_w)) ** 2
+        return r
 
     theta_t = np.arcsin(n_air / n_w * np.sin(theta))
     r = 0.5 * ((np.power(np.sin(theta - theta_t), 2) / np.power(np.sin(theta + theta_t), 2)) +
@@ -25,19 +186,14 @@ def fresnel_reflectance(theta, n_w):
 # function ray_phase
 # computes Rayleigh phase function for given geometry
 # QV 2016-12-14
-# MR 2025-11-21
+# MR 2025-11-21 https://pds-atmospheres.nmsu.edu/education_and_outreach/encyclopedia/rayleigh_phase.htm
 
-def ray_phase(theta_s, theta_v, phi_s, phi_v, n_w):
+def ray_phase(theta_s, theta_v, phi_s, phi_v):
     delta_phi = abs(phi_s - phi_v)
+
     costheta_plus = np.cos(theta_s)*np.cos(theta_v) - np.sin(theta_s)*np.sin(theta_v)*np.cos(delta_phi)
-    phase_r_theta = (0.75 * (1. + np.power(costheta_plus, 2.)))
+    phase_r = (0.75 * (1. + np.power(costheta_plus, 2.)))
 
-    fr_theta_s = fresnel_reflectance(theta_s, n_w)
-    fr_theta_v = fresnel_reflectance(theta_v, n_w)
-
-    phase_r = (fr_theta_s + fr_theta_v) * phase_r_theta
-
-               
     return phase_r
 
 
@@ -46,7 +202,7 @@ def ray_phase(theta_s, theta_v, phi_s, phi_v, n_w):
 # QV 2016-12-14
 
 def ray_tr(wl, theta_s, theta_v, Patm=1013.25):
-    tau_ray = ray_tau(wl, Patm=Patm)
+    tau_ray = ray_tau_ht74(wl, Patm=Patm)
     ray_tr = (1.+exp(-1.*tau_ray/cos(theta_v))) * (1.+exp(-1.*tau_ray/cos(theta_s))) / 4.
     return ray_tr
 
@@ -99,10 +255,15 @@ def get_sky_glint(wl, theta_s, theta_v, phi_s, phi_v, Patm):
         wavelength = wl_
     )
 
-    tau_ray = ray_tau(wl_, Patm=Patm)
-    phase_ray = ray_phase(theta_s_, theta_v_, phi_s_, phi_v_, n_w_)
+    tau_ray = ray_tau_ht74(wl_, Patm=Patm)
+    phase_r = ray_phase(theta_s_, theta_v_, phi_s_, phi_v_)
 
-    sky_glint = (tau_ray * phase_ray) / (4. * np.cos(theta_s) * np.cos(theta_v))
+    fr_theta_s = fresnel_reflectance(theta_s, n_w_)
+    fr_theta_v = fresnel_reflectance(theta_v, n_w_)
+
+    phase_ray_fr = (fr_theta_s + fr_theta_v) * phase_r
+
+    sky_glint = (tau_ray * phase_ray_fr) / (4. * np.cos(theta_s) * np.cos(theta_v))
 
     return sky_glint
 

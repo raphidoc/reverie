@@ -13,7 +13,7 @@ from reverie.correction.surface.rayleigh import get_sky_glint
 
 import lut
 
-def compute_rho_dark(args, method = "min"):
+def compute_rho_dark(args, method = "ols"):
 
     i, wl, rho_t, sol_zen, view_zen, sol_azi, view_azi, relative_azimuth, mask_water = args
 
@@ -21,13 +21,14 @@ def compute_rho_dark(args, method = "min"):
 
     if method == "min":
         geometry = "resolved"
-        i_dark = np.nanargmin(rho_t)
+        i_dark_flat = np.nanargmin(rho_t)
+        i_dark = np.unravel_index(i_dark_flat, rho_t.shape)
         rho_dark = rho_t.flatten()[i_dark]
 
 
     if method == "percentile":
         geometry = "resolved"
-        percentile = 0.01
+        percentile = 1
         rho_dark = np.nanpercentile(rho_t, percentile)
         i_dark = np.argwhere(rho_t == rho_dark)
         i_dark = tuple(i_dark[0]) if i_dark.size > 0 else None
@@ -43,12 +44,12 @@ def compute_rho_dark(args, method = "min"):
 
 
     if geometry == "resolved":
-        sol_zen_dark = sol_zen.flatten()[i_dark] if i_dark is not None else np.nan
-        view_zen_dark = view_zen.flatten()[i_dark] if i_dark is not None else np.nan
-        sol_azi_dark = sol_azi.flatten()[i_dark] if i_dark is not None else np.nan
-        view_azi_dark = view_azi.flatten()[i_dark] if i_dark is not None else np.nan
-        relative_azimuth_dark = relative_azimuth.flatten()[i_dark] if i_dark is not None else np.nan
-        mask_water_dark = mask_water.flatten()[i_dark] if i_dark is not None else np.nan
+        sol_zen_dark = sol_zen[i_dark] if i_dark is not None else np.nan
+        view_zen_dark = view_zen[i_dark] if i_dark is not None else np.nan
+        sol_azi_dark = sol_azi[i_dark] if i_dark is not None else np.nan
+        view_azi_dark = view_azi[i_dark] if i_dark is not None else np.nan
+        relative_azimuth_dark = relative_azimuth[i_dark] if i_dark is not None else np.nan
+        mask_water_dark = mask_water[i_dark] if i_dark is not None else np.nan
     else:
         sol_zen_dark = np.nanmean(sol_zen)
         view_zen_dark = np.nanmean(view_zen)
@@ -182,11 +183,11 @@ def aot555_dsf(wavelength, rho_dark, sol_zen, view_zen, sol_azi, view_azi, relat
 
     # import matplotlib.pyplot as plt
     #
-    # aot_index = 1
+    # aot_index = 0
     # plt.plot(wavelength, rho_dark)
-    # plt.plot(wavelength, rho_path_corrected[:, aot_index])
-    # plt.plot(wavelength, sky_glint_at_sensor[:, aot_index])
-    # plt.plot(wavelength, sky_glint[:, aot_index])
+    # # plt.plot(wavelength, rho_path_corrected[:, aot_index])
+    # # plt.plot(wavelength, sky_glint_at_sensor[:, aot_index])
+    # # plt.plot(wavelength, sky_glint[:, aot_index])
     # plt.plot(wavelength, rho_path_save[:, aot_index])
     # plt.show()
     #
@@ -198,8 +199,8 @@ def aot555_dsf(wavelength, rho_dark, sol_zen, view_zen, sol_azi, view_azi, relat
     # percentile = 10  # Change to desired percentile
     # aot550_retrieved = np.nanpercentile(aot550_candidate, percentile)
 
-    # aot550_retrieved = np.nanmedian(aot550_candidate)
+    aot550_retrieved = np.nanmedian(aot550_candidate)
 
-    aot550_retrieved = np.nanmin(aot550_candidate)
+    # aot550_retrieved = np.nanmin(aot550_candidate)
 
     return aot550_retrieved

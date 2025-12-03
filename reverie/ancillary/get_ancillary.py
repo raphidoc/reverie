@@ -13,6 +13,10 @@ from reverie.ancillary import obpg
 
 def add_ancillary(l1: ReveCube):
 
+    if l1.out_path is None:
+        l1.out_path = l1.in_path
+        l1.in_ds.close()
+
     l1.out_ds = nc.Dataset(l1.out_path, "a", format="NETCDF4")
 
     # test if ancillary data is already present
@@ -128,7 +132,8 @@ if __name__ == "__main__":
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-L1CG.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-L1CG.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1rg.nc"
         # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc"
         # "MC-50A/190818_MC-50A-WI-2x1x1_v02-L1CG.nc",
         # "MC-37A/190818_MC-37A-WI-1x1x1_v02-L1CG.nc",
