@@ -191,8 +191,9 @@ def fresnel_reflectance(theta, n_w):
 def ray_phase(theta_s, theta_v, phi_s, phi_v):
     delta_phi = abs(phi_s - phi_v)
 
-    costheta_plus = np.cos(theta_s)*np.cos(theta_v) - np.sin(theta_s)*np.sin(theta_v)*np.cos(delta_phi)
-    phase_r = (0.75 * (1. + np.power(costheta_plus, 2.)))
+    cos_theta_plus = np.cos(theta_s) * np.cos(theta_v) - np.sin(theta_s) * np.sin(theta_v) * np.cos(delta_phi)
+    # theta_plus = np.arccos(cos_theta_plus)
+    phase_r = (0.75 * (1. + np.power(cos_theta_plus, 2.)))
 
     return phase_r
 

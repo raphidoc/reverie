@@ -15,9 +15,9 @@ if __name__ == "__main__":
     # phi_v = np.deg2rad(np.arange(1, 360, 10))
 
     theta_0 = np.deg2rad(32)
-    theta_v = np.deg2rad(7)
+    theta_v = np.deg2rad(11)
     phi_0 = np.deg2rad(180)
-    phi_v = np.deg2rad(269)
+    phi_v = np.deg2rad(270)
 
     raa = abs(phi_0 - phi_v)
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
         water_salinity=30,
         water_temperature=17,
         wavelength=wl,
-        wind_speed=7)
+        wind_speed=0)
 
     df_z17 = pd.DataFrame({
         # 'model': "z17",

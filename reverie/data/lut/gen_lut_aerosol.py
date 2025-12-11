@@ -245,7 +245,7 @@ def run_model_and_accumulate(
 
         phase_ra_fr = (fr_theta_s + fr_theta_v) * phase_ra
 
-        sky_glint_total[i] = (tau_ra * phase_ra_fr) / (4 * np.cos(theta_s) * np.cos(theta_v))
+        sky_glint_total[i] = tau_ra * phase_ra_fr / (4 * np.cos(theta_s) * np.cos(theta_v))
 
         # counter += 1
 

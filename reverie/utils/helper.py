@@ -48,7 +48,9 @@ def get_f0(doy : int, wavelength):
 
     # calculate extraterrestrial solar irradiance on a specific day considering the sun-earth distance
     # (https://en.wikipedia.org/wiki/Sunlight#:~:text=If%20the%20extraterrestrial%20solar%20radiation,hitting%20the%20ground%20is%20around)
-    distance_factor = 1 + 0.033412 * np.cos(2 * np.pi * (doy - 3) / 365.0)
+    # IESNA, 1997. Recommended practice for the calculation of daylight availability. Illuminating
+    # Engineering Society of North America, New York.
+    distance_factor = 1 + 0.034 * np.cos(2 * np.pi * (doy - 2) / 365.0)
     _f0_cal = _f0 * distance_factor
 
     wrange = (_waves[0], _waves[-1] + 0.0001)

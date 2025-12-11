@@ -13,7 +13,7 @@ from reverie.correction.surface.rayleigh import get_sky_glint
 
 import lut
 
-def compute_rho_dark(args, method = "ols"):
+def compute_rho_dark(args, method = "percentile"):
 
     i, wl, rho_t, sol_zen, view_zen, sol_azi, view_azi, relative_azimuth, mask_water = args
 

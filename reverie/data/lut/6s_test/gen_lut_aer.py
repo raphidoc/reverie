@@ -140,8 +140,8 @@ if __name__ == "__main__":
 
     dimensions = [
         [32],  # sun zenith
-        [7],  # view zenith
-        [89],  # relative azimuth
+        [11],  # view zenith
+        [90],  # relative azimuth
         [
             0.057,
         ], # AOD 555

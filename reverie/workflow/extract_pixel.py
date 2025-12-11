@@ -9,15 +9,17 @@ if __name__ == "__main__":
     matchup_dir = "/D/Documents/phd/thesis/3_chapter/data/wise/pixex"
 
     matchups = [
-        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
-        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
+        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2r.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
     ]
 
     for matchup in matchups:
         reve_cube = ReveCube.from_reve_nc(os.path.join(image_dir, matchup))
 
         test = reve_cube.extract_pixel(
-            os.path.join(matchup_dir, "sas_coord.csv"),
+            os.path.join(matchup_dir, "jetski_coord.csv"),
             max_time_diff=5,
             window_size=7,
         )

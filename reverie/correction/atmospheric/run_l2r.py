@@ -173,7 +173,7 @@ def run_l2r(l1):
     view_zen = l1.in_ds.view_zenith.values.astype(np.float32)
     sol_azi = l1.in_ds.sun_azimuth.values.astype(np.float32)
     view_azi = l1.in_ds.view_azimuth.values.astype(np.float32)
-    relative_azimuth = l1.in_ds.relative_azimuth.values.astype(np.float32)
+    raa = l1.in_ds.relative_azimuth.values.astype(np.float32)
 
 
     rho_dark = np.full_like(wavelength, np.nan)
@@ -184,7 +184,7 @@ def run_l2r(l1):
     relative_azimuth_dark = np.full_like(wavelength, np.nan)
     mask_water_dark = np.full_like(wavelength, np.nan)
 
-    args_list = [(i, wl, rho_t, sol_zen, view_zen, sol_azi, view_azi, relative_azimuth, mask_water) for i, wl in enumerate(wavelength)]
+    args_list = [(i, wl, rho_t, sol_zen, view_zen, sol_azi, view_azi, raa, mask_water) for i, wl in enumerate(wavelength)]
     results = process_map(
         dsf.compute_rho_dark,
         args_list,
@@ -235,7 +235,7 @@ def run_l2r(l1):
 
     # Estimate the corresponding window size (including wavelength)
     # window_size = estimate_window_size(l1, wavelength, ram_gb)
-    window_size = 500
+    window_size = 1000
 
     # Divide the image in windows
     windows = l1.create_windows(window_size)
@@ -299,8 +299,8 @@ def run_l2r(l1):
             s_ra = ra_components["spherical_albedo_ra"].values
             t_g = gas_component["t_gas"].values
 
-            rho_path = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
-            rho_s = (rho_t - rho_path) / (t_ra * t_g + s_ra * (rho_t - rho_path))
+            # rho_path = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
+            rho_s = (rho_t - rho_path_ra) / (t_ra * t_g + s_ra * (rho_t - rho_path_ra))
 
             # theta_0 = np.deg2rad(image_sub["sun_zenith"])
             # theta_v = np.deg2rad(image_sub["view_zenith"])
@@ -517,7 +517,7 @@ def run_l2r(l1):
         "sun_zenith": l1.in_ds.sun_zenith,
         "view_azimuth": l1.in_ds.view_azimuth,
         "view_zenith": l1.in_ds.view_zenith,
-        "relative_azimuth": l1.in_ds.relative_azimuth,
+        "raa": l1.in_ds.relative_azimuth,
     }
 
     for var in tqdm(geom, desc="Writing geometry"):
@@ -550,11 +550,11 @@ if __name__ == "__main__":
 
     images = [
         # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1rg.nc",
-        "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1rg.nc"
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1r.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1r.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        # "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1r.nc"
     ]
 
     for image in images:

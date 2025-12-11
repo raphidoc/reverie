@@ -102,15 +102,15 @@ def run_l2w(l2r):
 
     wavelength = l2r.wavelength
     nir_i = np.abs(wavelength - 900).argmin()
+    rho_nir = l2r.in_ds["rho_w"][nir_i, :, :].values
 
     # Hochberg et al 2003
-    rho_nir = l2r.in_ds["rho_w"][nir_i, :, :].values
-    rho_nir_min = np.nanmin(rho_nir)
-    # np.nanpercentile(rho_nir, 0.1)
-    # rho_nir_min = np.nanpercentile(rho_nir[rho_nir >= 0], 0.1)
-    ref_sub = rho_nir - rho_nir_min
-
-    logging.info("Residual glint h03 rho_w({}) = {}".format(wavelength[nir_i], rho_nir_min))
+    # rho_nir_min = np.nanmin(rho_nir)
+    # # np.nanpercentile(rho_nir, 0.1)
+    # # rho_nir_min = np.nanpercentile(rho_nir[rho_nir >= 0], 0.1)
+    # ref_sub = rho_nir - rho_nir_min
+    #
+    # logging.info("Residual glint h03 rho_w({}) = {}".format(wavelength[nir_i], rho_nir_min))
 
     # Gao and li 2021
     n_w = get_water_refractive_index(30, 12, wavelength)
@@ -124,19 +124,19 @@ def run_l2w(l2r):
     l2r.out_ds = netCDF4.Dataset(l2r.in_path, "a", format="NETCDF4")
     #  TODO: add check for existing var and remove if so
 
-    if "rho_w_h03" not in l2r.out_ds.variables:
-        l2r.create_var_nc(
-            name="rho_w_h03",
-            type="i4",
-            dims=(
-                "wavelength",
-                "y",
-                "x",
-            ),
-            comp="zlib",
-            complevel=1,
-            scale=scale_factor,
-        )
+    # if "rho_w_h03" not in l2r.out_ds.variables:
+    #     l2r.create_var_nc(
+    #         name="rho_w_h03",
+    #         type="i4",
+    #         dims=(
+    #             "wavelength",
+    #             "y",
+    #             "x",
+    #         ),
+    #         comp="zlib",
+    #         complevel=1,
+    #         scale=scale_factor,
+    #     )
 
     if "rho_w_g21" not in l2r.out_ds.variables:
         l2r.create_var_nc(
@@ -158,14 +158,14 @@ def run_l2w(l2r):
     for i, wl in tqdm(enumerate(l2r.wavelength), desc="Residual glint correction"):
         rho_w = l2r.out_ds.variables["rho_w"][i,:,:]
 
-        rho_w_h03 = rho_w - ref_sub
+        # rho_w_h03 = rho_w - ref_sub
         rho_w_g21 = rho_w - (rho_f[i] * ref_ratio)
 
-        np.nan_to_num(rho_w_h03, copy=False, nan=l2r.no_data * scale_factor)
+        # np.nan_to_num(rho_w_h03, copy=False, nan=l2r.no_data * scale_factor)
         np.nan_to_num(rho_w_g21, copy=False, nan=l2r.no_data * scale_factor)
         # rho_t = np.round(rho_t).astype("int32")
 
-        l2r.out_ds.variables["rho_w_h03"][i, :, :] = rho_w_h03
+        # l2r.out_ds.variables["rho_w_h03"][i, :, :] = rho_w_h03
         l2r.out_ds.variables["rho_w_g21"][i, :, :] = rho_w_g21
 
     # for i, wl in tqdm(enumerate(l2r.wavelength), desc="Residual glint correction"):
@@ -269,11 +269,11 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l2rg.nc",
-        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2rg.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2rg.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l2rg.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2r.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
     ]
 
     for image in images:
