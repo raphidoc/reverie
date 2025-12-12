@@ -105,16 +105,16 @@ def run_l1r(l1c: ReveCube, bbox = None, wavelength_filter = None, gain = None):
     # Compute water mask on rho_t to apply sky_glint correction to rho_path
     rho_t = l1c.out_ds["rho_at_sensor"]
 
-    blue_i = np.abs(wavelength - 400).argmin()
+    # blue_i = np.abs(wavelength - 400).argmin()
     green_i = np.abs(wavelength - 550).argmin()
-    red_i = np.abs(wavelength - 600).argmin()
-    nir_i = np.abs(wavelength - 850).argmin()
+    # red_i = np.abs(wavelength - 600).argmin()
+    # nir_i = np.abs(wavelength - 850).argmin()
     swir_i = np.abs(wavelength - 2190).argmin()
 
-    blue = rho_t[blue_i, :, :]
+    # blue = rho_t[blue_i, :, :]
     green = rho_t[green_i, :, :]
-    red = rho_t[red_i, :, :]
-    nir = rho_t[nir_i, :, :]
+    # red = rho_t[red_i, :, :]
+    # nir = rho_t[nir_i, :, :]
     swir = rho_t[swir_i, :, :]
 
     ndwi = (green - swir) / (green + swir)
@@ -171,10 +171,10 @@ if __name__ == "__main__":
     image_dir = "/D/Data/WISE/"
 
     images = [
-        "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
         "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
         # "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1cg.nc"
     ]
@@ -186,8 +186,6 @@ if __name__ == "__main__":
     # bbox = None
     # Reduced bbox for dev
     # bbox = {"lon": (-64.36808, -64.35322), "lat": (49.80347, 49.81397)}
-
-
 
     gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
     gain = pd.read_csv(gain_path)

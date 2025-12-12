@@ -425,11 +425,12 @@ class ReveCube(ABC):
     def filter_bad_band(self):
         # filter image for bad bands
         bad_band_list = self.in_ds["radiance_at_sensor"].bad_band_list
-        if isinstance(bad_band_list, str):
-            bad_band_list = str.split(bad_band_list, ", ")
+        bad_band_list = [int(b) for b in bad_band_list]
+        # if isinstance(bad_band_list, str):
+        #     bad_band_list = str.split(bad_band_list, ", ")
 
         bad_band_list = np.array(bad_band_list)
-        good_band_indices = np.where(bad_band_list == "1")[0]
+        good_band_indices = np.where(bad_band_list == 1)[0]
         good_bands_slice = slice(min(good_band_indices), max(good_band_indices) + 1)
 
         self.wavelength = self.wavelength[good_band_indices]

@@ -15,7 +15,6 @@ from reverie.correction.surface.rayleigh import get_sky_glint
 
 import logging
 
-
 def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land: bool):
     """
     Function to compute vicarious calibration gain from a ReveCube L1 image and in situ Rrs.
@@ -41,7 +40,7 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
         insitu_path,
         max_time_diff=12,
         window_size=window_size,
-        output_box = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/"
+        output_box = None #"/D/Documents/phd/thesis/3_chapter/data/wise/viccal/"
     )[1]
 
     if window_dict is None:
@@ -106,27 +105,51 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
         rho_w_3d = np.repeat(rho_w_3d, len(y), axis=1)
         rho_w = np.repeat(rho_w_3d, len(x), axis=2)
 
-        # rho_w = xr.Dataset(
-        #     data_vars=dict(
-        #         rho_w=(
-        #             ["wavelength", "y", "x"],
-        #             rho_w_3d,
-        #         ),
-        #     ),
-        #     coords=dict(
-        #         wavelength=wavelength,
-        #         y=("y", y),
-        #         x=("x", x),
-        #     ),
-        # )
-
-        rho_path_gas_cor = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
+        # rho_path_gas_cor = (rho_path_ra * t_g) / (1 - rho_path_ra * s_ra)
 
         rho_s = rho_w + sky_glint if not land else rho_w
 
-        rho_t_target = rho_path_gas_cor + (rho_s * (t_ra * t_g) / (1 - rho_s * s_ra))
+        # rho_t_target = rho_path_ra + (rho_s * t_ra * t_g / (1 - rho_s * s_ra))
+
+        # From atbd mod08
+        # rho_t_target = t_g_o3_02_co2 * (rho_path_r + (rho_path_ra - rho_path_r) * t_g_h2o +
+        #                                 t_tot * (rho_s / (1 - s * rho_s)) * t_g_h2o)
+
+        rho_t_target = t_g * (rho_path_ra + t_ra * (rho_s / (1- s_ra * rho_s)))
+
+        # From acolite
+        # rho_s = (rho_t / t_g - rho_path_ra) / (t_ra + s_ra * (rho_t / t_g - rho_path_ra))
+        # rho_t_target = t_g * ((rho_path_ra * (rho_s * s_ra - 1) - rho_s * t_ra) / (rho_s * s_ra - 1))
 
         gain = rho_t_target / rho_t
+
+        ### DEV
+
+        # import matplotlib.pyplot as plt
+        #
+        # image_sub = l1.in_ds.isel(x=slice(window.row_off+400, window.row_off+407), y=slice(window.col_off+400, window.col_off+407))
+        # rho_t_test = image_sub["rho_at_sensor"].values * gain
+        #
+        # # rho_w_retrieved = (rho_t * gain - rho_path_ra) / (t_ra * t_g + s_ra * (rho_t * gain - rho_path_ra)) - sky_glint
+        # rho_w_retrieved = ((rho_t_test / t_g) - rho_path_ra) / (t_ra + s_ra * ((rho_t_test / t_g) - rho_path_ra)) - sky_glint
+        #
+        # # Plot retrieved water reflectance for the center pixel (y=1, x=1)
+        #
+        # spectrum = rho_w_retrieved[:, 1, 1]
+        # plt.figure()
+        # plt.plot(wavelength, spectrum, marker="o")
+        # plt.plot(wavelength, rho_w[:, 1, 1], marker="x")
+        # plt.xlabel("wavelength (nm)")
+        # plt.ylabel("rho_w")
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.plot(wavelength, gain[:, 1, 1], marker="o")
+        # plt.xlabel("wavelength (nm)")
+        # plt.ylabel("gain")
+        # plt.show()
+
+        ###
 
         ds_out = xr.Dataset(
             {
@@ -157,15 +180,15 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
                         "x": x,
                     },
                 ),
-                "rho_path_gas_cor": xr.DataArray(
-                    rho_path_gas_cor,
-                    dims=["wavelength", "y", "x"],
-                    coords={
-                        "wavelength": wavelength,
-                        "y": y,
-                        "x": x,
-                    },
-                ),
+                # "rho_path_gas_cor": xr.DataArray(
+                #     rho_path_gas_cor,
+                #     dims=["wavelength", "y", "x"],
+                #     coords={
+                #         "wavelength": wavelength,
+                #         "y": y,
+                #         "x": x,
+                #     },
+                # ),
                 "rho_t_target": xr.DataArray(
                     rho_t_target,
                     dims=["wavelength", "y", "x"],
@@ -214,6 +237,7 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
 if __name__ == "__main__":
     # insitu data
     insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/sas_rho.csv"
+    # insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/jetski_rho.csv"
     # insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/svc_rho.csv"
     in_situ = pd.read_csv(insitu_path)
 

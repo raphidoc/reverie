@@ -129,7 +129,7 @@ def aot555_dsf(wavelength, rho_dark, sol_zen, view_zen, sol_azi, view_azi, relat
         t_gas = lut.get_t_gas(wl, sol_zen[i], view_zen[i], relative_azimuth[i], water, ozone, target_pressure,
                               sensor_altitude)
         rho_path_save[i] = rho_path
-        rho_path_gas_cor[i] = (rho_path * t_gas) / (1 - rho_path * s_ra)
+        # rho_path_gas_cor[i] = (rho_path * t_gas) / (1 - rho_path * s_ra)
 
         if mask_water_dark[i]:
             theta_0 = np.deg2rad(sol_zen[i])
@@ -141,9 +141,9 @@ def aot555_dsf(wavelength, rho_dark, sol_zen, view_zen, sol_azi, view_azi, relat
 
             sky_glint_at_sensor[i] = ((sky_glint[i] * t_ra * t_gas) / (1 - sky_glint[i] * s_ra))
 
-            rho_path_corrected[i] = rho_path_gas_cor[i] + sky_glint_at_sensor[i]
+            rho_path_corrected[i] = rho_path + sky_glint_at_sensor[i]
         else:
-            rho_path_corrected[i] = rho_path_gas_cor[i]
+            rho_path_corrected[i] = rho_path
 
         f_interp = sp.interp1d(rho_path_corrected[i], aot550_values, bounds_error=False, fill_value=np.nan)
         aot550_candidate[i] = f_interp(rho_dark[i])
@@ -168,7 +168,7 @@ def aot555_dsf(wavelength, rho_dark, sol_zen, view_zen, sol_azi, view_azi, relat
                     "mask_water_dark": mask_water_dark[i],
                     "aot550": aot_val,
                     "rho_path_save": rho_path_save[i, aot_idx],
-                    "rho_path_gas_cor": rho_path_gas_cor[i, aot_idx],
+                    # "rho_path_gas_cor": rho_path_gas_cor[i, aot_idx],
                     "sky_glint": sky_glint[i, aot_idx],
                     "sky_glint_at_sensor": sky_glint_at_sensor[i, aot_idx],
                     "rho_path_corrected": rho_path_corrected[i, aot_idx],

@@ -217,7 +217,8 @@ def run_model_and_accumulate(
             temp["atmospheric_reflectance_at_sensor"]
         )
 
-        gas_trans_total[i] = float(temp["global_gas_trans_total"])
+        # gas_trans_total[i] = float(temp["global_gas_trans_total"])
+        gas_trans_total[i] = float(temp["ozone_gas_trans_total"]) * float(temp["water_gas_trans_total"])
 
         # counter += 1
 

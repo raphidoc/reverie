@@ -9,9 +9,9 @@ if __name__ == "__main__":
     matchup_dir = "/D/Documents/phd/thesis/3_chapter/data/wise/pixex"
 
     matchups = [
-        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2r.nc",
         # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2r.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
         "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
     ]
 
