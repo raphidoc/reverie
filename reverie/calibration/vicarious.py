@@ -236,18 +236,18 @@ def run_vicarious_cal(l1: ReveCube, in_situ: pandas.DataFrame, window_size, land
 
 if __name__ == "__main__":
     # insitu data
-    insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/sas_rho.csv"
-    # insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/jetski_rho.csv"
+    # insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/sas_rho.csv"
+    insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/jetski_rho.csv"
     # insitu_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/svc_rho.csv"
     in_situ = pd.read_csv(insitu_path)
 
     image_dir = "/D/Data/WISE/"
 
     images = [
-        # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1r.nc",
+        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1r.nc",
         "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1r.nc",
         "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1r.nc",
-        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
+        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
     ]
 
     for image in images:
@@ -258,6 +258,6 @@ if __name__ == "__main__":
         viccal_df.to_csv(
             os.path.join(
                 "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/",
-                f"{l1.image_name}_gain.csv",
+                f"{l1.image_name}_gain_jetski.csv",
             )
         )

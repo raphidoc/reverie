@@ -101,7 +101,7 @@ def run_l2w(l2r):
 
 
     wavelength = l2r.wavelength
-    nir_i = np.abs(wavelength - 850).argmin()
+    nir_i = np.abs(wavelength - 800).argmin()
     rho_nir = l2r.in_ds["rho_w"][nir_i, :, :].values
 
     # Hochberg et al 2003
@@ -270,10 +270,10 @@ if __name__ == "__main__":
 
     images = [
         # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l2rg.nc",
-        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2rg.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2r.nc",
+        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
+        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2r.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2r.nc",
     ]
 
     for image in images:

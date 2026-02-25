@@ -26,6 +26,8 @@ import reverie.correction.atmospheric.get_atmosphere as atm
 from reverie.correction.surface.rayleigh import get_sky_glint
 import dsf
 import lut
+from reverie.correction.surface.rayleigh import fresnel_reflectance
+from reverie.correction.surface.water_refractive_index import get_water_refractive_index
 
 def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_interp, mask_water):
 
@@ -60,9 +62,22 @@ def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_in
         mask_water_window = mask_water[y_slice, x_slice]
         rho_w = np.where(mask_water_window, rho_s - sky_glint, np.nan)
 
+        wavelength = l1.wavelength
+        nir_i = np.abs(wavelength - 800).argmin()
+        rho_nir = rho_w[nir_i, :, :]
+
+        # Gao and li 2021
+        n_w = get_water_refractive_index(30, 12, wavelength)
+        rho_f = fresnel_reflectance(0, n_w)
+        rho_f_nir = rho_f[nir_i]
+        ref_ratio = rho_nir / rho_f_nir
+
+        rho_w_g21 = rho_w - (rho_f * ref_ratio)
+
     else:
         rho_s = np.full_like(rho_t, np.nan)
         rho_w = np.full_like(rho_t, np.nan)
+        rho_w_g21 = np.full_like(rho_t, np.nan)
 
     y_coords = l1.in_ds["y"].isel(y=y_slice)
     x_coords = l1.in_ds["x"].isel(x=x_slice)
@@ -85,6 +100,15 @@ def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_in
             ),
             "rho_w": xr.DataArray(
                 rho_w,
+                dims=["wavelength", "y", "x"],
+                coords={
+                    "wavelength": wl_coords,
+                    "y": y_coords,
+                    "x": x_coords,
+                },
+            ),
+            "rho_w_g21": xr.DataArray(
+                rho_w_g21,
                 dims=["wavelength", "y", "x"],
                 coords={
                     "wavelength": wl_coords,
@@ -133,7 +157,7 @@ def process_window(window, l1_path, output_dir, aod555_dsf, aero_interps, gas_in
 
     return out_path
 
-def run_l2r(l1, aod_method, gain_df = None):
+def run_l2r(l1, aod_method, gain_df = None, wavelength_filter = None):
 
     log_dir = os.path.dirname(l1.in_path)
     log_file = os.path.join(log_dir, f"{os.path.splitext(os.path.basename(l1.in_path))[0]}_l2r.log")
@@ -158,15 +182,18 @@ def run_l2r(l1, aod_method, gain_df = None):
     logging.info("Starting run_l2r processing")
 
     if "l1rg" in l1.in_path:
-        out_name = re.sub(r'l1\w+', 'l2rg', l1c.in_path)
+        out_name = re.sub(r'l1\w+', 'l2rg', l1.in_path)
     else:
         out_name = re.sub(r'l1\w+', 'l2r', l1.in_path)
 
+    if wavelength_filter is not None:
+        l1.mask_wavelength(wavelength_filter)
+
     if gain_df is not None:
-        out_name = re.sub(r'l1\w+', 'l2rg', l1c.in_path)
+        out_name = re.sub(r'l1\w+', 'l2rg', l1.in_path)
 
         wavelength_mask = gain_df["wavelength"].values
-        l1c.mask_wavelength(wavelength_mask)
+        l1.mask_wavelength(wavelength_mask)
 
     wavelength = l1.wavelength
     mask_water = l1.in_ds.mask_water.values.astype(bool)
@@ -249,7 +276,7 @@ def run_l2r(l1, aod_method, gain_df = None):
 
     # Estimate the corresponding window size (including wavelength)
     # window_size = estimate_window_size(l1, wavelength, ram_gb)
-    window_size = 1000
+    window_size = 900
 
     # Divide the image in windows
     windows = l1.create_windows(window_size)
@@ -260,6 +287,7 @@ def run_l2r(l1, aod_method, gain_df = None):
 
     l1.create_var_nc(name="rho_surface", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
     l1.create_var_nc(name="rho_w", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
+    l1.create_var_nc(name="rho_w_g21", type="i4", dims=("wavelength", "y", "x"), comp="zlib", scale=scale_factor)
 
     # non_empty_windows = []
     # for window in tqdm(windows, desc="Filtering windows"):
@@ -278,14 +306,23 @@ def run_l2r(l1, aod_method, gain_df = None):
     #         l1.out_ds.variables["rho_w"][:, y_slice, x_slice] = l1.no_data * scale_factor
     #
     # logging.info(
-    #     f"{len(non_empty_windows)} non empty windows to process"
+    #     f"{len(non_empty_windows)} non-empty windows to process"
     # )
 
     # output_dir = os.path.join(os.path.dirname(l1.in_path),"temp_windows_"+l1.image_name)  # Must exist
     # os.makedirs(output_dir, exist_ok=True)
 
-    aero_interps, aero_points = atm.build_aer_interpolators(lut.load_aer())
-    gas_interp, gas_points = atm.build_gas_interpolator(lut.load_gas())
+    # aero_interps, aero_points = atm.build_aer_interpolators(lut.load_aer())
+    # gas_interp, gas_points = atm.build_gas_interpolator(lut.load_gas())
+
+    aer_lut = lut.load_aer()  # your WISE-resampled LUT file
+    gas_lut = lut.load_gas()
+
+    aer_lut = lut.slice_lut_to_wavelengths(aer_lut, wavelength)
+    gas_lut = lut.slice_lut_to_wavelengths(gas_lut, wavelength)
+
+    aero_interps, _ = atm.build_aer_interpolators_no_wl(aer_lut)
+    gas_interp, _ = atm.build_gas_interpolator_no_wl(gas_lut)
 
     for window in tqdm(windows, desc="Processing windows"):
         # process_window(
@@ -298,25 +335,58 @@ def run_l2r(l1, aod_method, gain_df = None):
         #     mask_water=mask_water
         # )
 
-        if gain_df is not None:
-            gain_1d = np.array(gain_df["gain"][1:])
-
-            # Add two new dims to temp
-            gain_3d = gain_1d[:, np.newaxis, np.newaxis]
-
-            # Repeat temp along the new dims
-            gain_3d = np.repeat(gain_3d, window.height, axis=1)
-            gain = np.repeat(gain_3d, window.width, axis=2)
-
         y_slice = slice(int(window.row_off), int(window.row_off + window.height))
         x_slice = slice(int(window.col_off), int(window.col_off + window.width))
 
         image_sub = l1.in_ds.isel(x=x_slice, y=y_slice)
-        rho_t = image_sub["rho_at_sensor"] * gain
+
+        if gain_df is not None:
+            # gain_1d_intercept = np.array(gain_df["intercept_estimate"][1:])
+            gain_1d_coeff = np.array(gain_df["rho_t_estimate"][1:])
+
+            # Add two new dims to temp
+            # gain_3d_intercept = gain_1d_intercept[:, np.newaxis, np.newaxis]
+            gain_3d_coeff = gain_1d_coeff[:, np.newaxis, np.newaxis]
+
+            # Repeat temp along the new dims
+            # gain_3d_intercept = np.repeat(gain_3d_intercept, window.height, axis=1)
+            # gain_intercept = np.repeat(gain_3d_intercept, window.width, axis=2)
+
+            gain_3d_coeff = np.repeat(gain_3d_coeff, window.height, axis=1)
+            gain_coeff = np.repeat(gain_3d_coeff, window.width, axis=2)
+
+            # rho_t = image_sub["rho_at_sensor"] * gain_coeff + gain_intercept
+            rho_t = image_sub["rho_at_sensor"] * gain_coeff
+        else:
+            rho_t = image_sub["rho_at_sensor"]
+
+        ### DEV
+
+        # import matplotlib.pyplot as plt
+        #
+        # # Find mask where any wavelength is not NaN at (y, x)
+        # mask_valid = ~np.isnan(rho_t)
+        # mask_any_valid = np.any(mask_valid, axis=0)  # shape: (y, x)
+        #
+        # # Get the (y, x) indices
+        # y_idx, x_idx = np.where(mask_any_valid)
+        # # y_idx and x_idx are arrays of indices where at least one wavelength is not NaN
+        #
+        # plt.figure()
+        # plt.plot(wavelength, rho_t[:, y_idx[200], x_idx[200]], marker="o")
+        # plt.plot(wavelength, image_sub["rho_at_sensor"][:, y_idx[200], x_idx[200]], marker="x")
+        # plt.xlabel("wavelength (nm)")
+        # plt.ylabel("rho_w")
+        # plt.show()
+
+        ###
 
         if not np.isnan(rho_t).all():
-            ra_components = atm.get_ra(l1, window, l1.wavelength, aod555, *list(aero_interps.values()))
-            gas_component = atm.get_gas(l1, window, l1.wavelength, gas_interp)
+            # ra_components = atm.get_ra(l1, window, l1.wavelength, aod555, *list(aero_interps.values()))
+            # gas_component = atm.get_gas(l1, window, l1.wavelength, gas_interp)
+
+            ra_components = atm.get_ra_no_wl(l1, window, l1.wavelength, aod555, aero_interps)
+            gas_component = atm.get_gas_no_wl(l1, window, l1.wavelength, gas_interp)
 
             rho_path_ra = ra_components["rho_path"].values
             t_ra = ra_components["trans_ra"].values
@@ -339,6 +409,18 @@ def run_l2r(l1, aod_method, gain_df = None):
             mask_water_window = mask_water[y_slice, x_slice]
             rho_w = np.where(mask_water_window, rho_s - sky_glint, np.nan)
 
+            wavelength = l1.wavelength
+            nir_i = np.abs(wavelength - 800).argmin()
+            rho_nir = rho_w[nir_i, :, :]
+
+            # Gao and li 2021
+            n_w = get_water_refractive_index(30, 12, wavelength)
+            rho_f = fresnel_reflectance(0, n_w)
+            rho_f_nir = rho_f[nir_i]
+            ref_ratio = rho_nir / rho_f_nir
+
+            rho_w_g21 = rho_w - rho_f[:, None, None] * ref_ratio[None, :, :]#(rho_f * ref_ratio)
+
             ### DEV
 
             # import matplotlib.pyplot as plt
@@ -356,12 +438,15 @@ def run_l2r(l1, aod_method, gain_df = None):
         else:
             rho_s = np.full_like(rho_t, np.nan)
             rho_w = np.full_like(rho_t, np.nan)
+            rho_w_g21 = np.full_like(rho_t, np.nan)
 
         np.nan_to_num(rho_s, copy=False, nan=l1.no_data * scale_factor)
         np.nan_to_num(rho_w, copy=False, nan=l1.no_data * scale_factor)
+        np.nan_to_num(rho_w_g21, copy=False, nan=l1.no_data * scale_factor)
 
         l1.out_ds["rho_surface"][:, y_slice, x_slice] = rho_s
         l1.out_ds["rho_w"][:, y_slice, x_slice] = rho_w
+        l1.out_ds["rho_w_g21"][:, y_slice, x_slice] = rho_w_g21
 
     # process_func = partial(
     #     process_window,
@@ -590,15 +675,33 @@ if __name__ == "__main__":
 
     images = [
         # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1rg.nc",
-        # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1rg.nc",
+        "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1r.nc",
+        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1r.nc",
+        "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1r.nc",
         "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1r.nc",
     ]
 
-    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
+    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_ratio_sas.csv"
     gain = pd.read_csv(gain_path)
+
+    wavelength_filter = (370, 800)
 
     for image in images:
         l1c = ReveCube.from_reve_nc(os.path.join(image_dir, image))
-        run_l2r(l1c, aod_method="merra2", gain_df=gain)
+        # run_l2r(l1c, aod_method="merra2", gain_df=gain, wavelength_filter=wavelength_filter)
+        run_l2r(l1c, aod_method="dsf", gain_df=None)
+
+    # images = [
+    #     # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l2rg.nc",
+    #     # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l2rg.nc",
+    #     "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l2rg.nc",
+    #     # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l2rg.nc",
+    #     # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l2rg.nc",
+    # ]
+    #
+    # from run_l2w import run_l2w
+    #
+    # for image in images:
+    #
+    #     l2r = ReveCube.from_reve_nc(os.path.join(image_dir, image))
+    #     run_l2w(l2r)

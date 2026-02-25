@@ -79,6 +79,33 @@ def run_l1r(l1c: ReveCube, bbox = None, wavelength_filter = None, gain = None):
         scale=scale_factor,
     )
 
+    if gain is not None:
+        l1c.create_var_nc(
+            name="rho_at_sensor_calibrated",
+            type="i4",
+            dims=(
+                "wavelength",
+                "y",
+                "x",
+            ),
+            comp="zlib",
+            complevel=1,
+            scale=scale_factor,
+        )
+
+        l1c.create_var_nc(
+            name="rho_at_sensor_delta",
+            type="i4",
+            dims=(
+                "wavelength",
+                "y",
+                "x",
+            ),
+            comp="zlib",
+            complevel=1,
+            scale=scale_factor,
+        )
+
     # args_list = [(i, wl, l1c, f0, scale) for i, wl in enumerate(wavelength)]
     # results = process_map(compute_rho_t, args_list, max_workers=os.cpu_count() - 2)
 
@@ -92,15 +119,24 @@ def run_l1r(l1c: ReveCube, bbox = None, wavelength_filter = None, gain = None):
             mask = np.int32(gain["wavelength"]) == np.int32(wl)
             if not mask.any():
                 raise ValueError(f"Wavelength {wl} not found in gain table")
-            gain_value = gain.loc[mask, "gain"].values[0]
+            gain_intercept = gain.loc[mask, "intercept_estimate"].values[0]
+            gain_coeff = gain.loc[mask, "rho_t_estimate"].values[0]
 
-            rho_t = rho_t * gain_value
+            rho_t_cal = rho_t * gain_coeff + gain_intercept
+            rho_t_delta = rho_t_cal - rho_t
+
+            np.nan_to_num(rho_t_cal, copy=False, nan=l1c.no_data * scale_factor)
+            np.nan_to_num(rho_t_delta, copy=False, nan=l1c.no_data * scale_factor)
+
+            l1c.out_ds.variables["rho_at_sensor_calibrated"][i, :, :] = rho_t_cal
+            l1c.out_ds.variables["rho_at_sensor_delta"][i, :, :] = rho_t_delta
 
         # Assign missing value
         np.nan_to_num(rho_t, copy=False, nan=l1c.no_data * scale_factor)
         # rho_t = np.round(rho_t).astype("int32")
 
         l1c.out_ds.variables["rho_at_sensor"][i, :, :] = rho_t
+
 
     # Compute water mask on rho_t to apply sky_glint correction to rho_path
     rho_t = l1c.out_ds["rho_at_sensor"]
@@ -173,9 +209,9 @@ if __name__ == "__main__":
     images = [
         # "ACI-10A/220705_ACI-10A-WI-1x1x1_v01-l1cg.nc",
         # "ACI-11A/220705_ACI-11A-WI-1x1x1_v01-l1cg.nc",
-        # "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
+        "ACI-12A/220705_ACI-12A-WI-1x1x1_v01-l1cg.nc",
         # "ACI-13A/220705_ACI-13A-WI-1x1x1_v01-l1cg.nc",
-        "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
+        # "ACI-14A/220705_ACI-14A-WI-1x1x1_v01-l1cg.nc",
         # "MC-11A/190820_MC-11A-WI-1x1x1_v02-l1cg.nc"
     ]
 
@@ -184,14 +220,16 @@ if __name__ == "__main__":
 
     bbox = {"lon": ( -64.44237, -64.23789), "lat": (49.7126, 49.84078)}
     # bbox = None
-    # Reduced bbox for dev
+    # Reduced bbox for dev ACI-13A
     # bbox = {"lon": (-64.36808, -64.35322), "lat": (49.80347, 49.81397)}
 
-    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_final.csv"
+    gain_path = "/D/Documents/phd/thesis/3_chapter/data/wise/viccal/gain_el_sma.csv"
     gain = pd.read_csv(gain_path)
+
+    wavelength_gain = gain["wavelength"].values
 
     for image in images:
         l1c = ReveCube.from_reve_nc(os.path.join(image_dir, image))
 
-        run_l1r(l1c, bbox, wavelength_lut, gain=gain)
+        run_l1r(l1c, bbox, wavelength_gain, gain=gain)
         # run_l1r(l1c, bbox, wavelength_lut, gain=None)
